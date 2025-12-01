@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#020617" />
+    <title>Solaris - AI RPG</title>
+    <link rel="manifest" href="/manifest.json" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background-color: #020617; /* slate-950 */
+        color: #f8fafc; /* slate-50 */
+        font-family: 'Outfit', sans-serif;
+        overflow-x: hidden;
+      }
+      
+      /* Modern Glass Scrollbar */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background-color: rgba(255, 255, 255, 0.1);
+        border-radius: 20px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background-color: rgba(255, 255, 255, 0.3);
+      }
+
+      /* Utilities */
+      .glass-panel {
+        background: rgba(15, 23, 42, 0.65);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+      }
+      
+      .glass-strong {
+        background: rgba(15, 23, 42, 0.85);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .glass-input {
+        background: rgba(2, 6, 23, 0.4);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: white;
+        transition: all 0.3s ease;
+      }
+      .glass-input:focus {
+        background: rgba(2, 6, 23, 0.7);
+        border-color: rgba(192, 132, 252, 0.6); /* fuchsia-400 */
+        box-shadow: 0 0 15px rgba(192, 132, 252, 0.15);
+        outline: none;
+      }
+
+      .text-glow {
+        text-shadow: 0 0 20px rgba(192, 132, 252, 0.5);
+      }
+      
+      /* Animation Classes */
+      .animate-fade-in-up {
+        animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      
+      @keyframes fadeInUp {
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      .animate-spin-slow {
+        animation: spin 12s linear infinite;
+      }
+      
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 4px;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.29.0"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
