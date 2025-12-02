@@ -180,6 +180,7 @@ export interface UiSettings {
     reduceMotion: boolean;
     textSize: 'small' | 'medium' | 'large';
     themeColor: 'fuchsia' | 'cyan' | 'emerald';
+    zoomLevel: number;
 }
 
 export interface AudioSettings {

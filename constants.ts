@@ -182,7 +182,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   uiSettings: {
       reduceMotion: false,
       textSize: 'medium',
-      themeColor: 'fuchsia'
+      themeColor: 'fuchsia',
+      zoomLevel: 1.0
   },
   audioSettings: {
       bgmVolume: 50,

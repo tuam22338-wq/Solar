@@ -10,11 +10,14 @@ import Icon from './common/Icon';
 import Button from './common/Button';
 import ToggleSwitch from './common/ToggleSwitch';
 
-interface SettingsScreenProps { onBack: () => void; }
+interface SettingsScreenProps { 
+    onBack: () => void;
+    onZoomChange?: (zoom: number) => void;
+}
 type ValidationStatus = 'idle' | 'loading' | 'valid' | 'invalid' | 'rate_limited';
 type TabId = 'ui' | 'audio' | 'ai' | 'safety' | 'advanced';
 
-const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
+const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack, onZoomChange }) => {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [activeTab, setActiveTab] = useState<TabId>('ai'); // Default to AI
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -24,8 +27,21 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
   useEffect(() => {
     const loaded = getSettings();
     if (loaded.apiKeyConfig.keys.length === 0) loaded.apiKeyConfig.keys.push('');
-    // Ensure all fields exist when loading old settings
-    setSettings({ ...DEFAULT_SETTINGS, ...loaded, aiSettings: { ...DEFAULT_SETTINGS.aiSettings, ...loaded.aiSettings }, uiSettings: { ...DEFAULT_SETTINGS.uiSettings, ...loaded.uiSettings }, audioSettings: { ...DEFAULT_SETTINGS.audioSettings, ...loaded.audioSettings } });
+    
+    // Auto-detect zoom if it wasn't saved, to make sure slider matches reality
+    let currentZoom = loaded.uiSettings.zoomLevel;
+    if (!currentZoom || currentZoom === 1.0) {
+         const isMobile = window.innerWidth < 768;
+         if (isMobile) currentZoom = 0.6;
+    }
+
+    setSettings({ 
+        ...DEFAULT_SETTINGS, 
+        ...loaded, 
+        uiSettings: { ...DEFAULT_SETTINGS.uiSettings, ...loaded.uiSettings, zoomLevel: currentZoom }, // Sync zoom
+        aiSettings: { ...DEFAULT_SETTINGS.aiSettings, ...loaded.aiSettings }, 
+        audioSettings: { ...DEFAULT_SETTINGS.audioSettings, ...loaded.audioSettings } 
+    });
   }, []);
 
   const handleSave = () => {
@@ -33,6 +49,13 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
     onBack();
   };
   
+  const handleZoomUpdate = (value: number) => {
+      setSettings(p => ({...p, uiSettings: {...p.uiSettings, zoomLevel: value}}));
+      if (onZoomChange) {
+          onZoomChange(value);
+      }
+  };
+
   const validateAndSaveKey = async (key: string, index: number) => {
     if (!key.trim()) { setValidationStatus(p => ({ ...p, [index]: 'idle' })); return; }
     setValidationStatus(p => ({ ...p, [index]: 'loading' }));
@@ -78,6 +101,32 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
               return (
                   <div className="space-y-6 animate-fade-in-up">
                       <h2 className="text-xl font-bold text-fuchsia-300 mb-4">Tùy Chỉnh Giao Diện</h2>
+                      
+                      <div className="glass-panel p-6 rounded-2xl space-y-4">
+                          <div className="flex justify-between items-center mb-2">
+                              <div>
+                                  <div className="font-bold text-slate-200">Độ Thu Phóng (Zoom)</div>
+                                  <div className="text-xs text-slate-500">Điều chỉnh kích thước toàn bộ ứng dụng.</div>
+                              </div>
+                              <span className="text-fuchsia-400 font-bold">{Math.round((settings.uiSettings.zoomLevel || 1) * 100)}%</span>
+                          </div>
+                          <input 
+                            type="range" 
+                            min="0.5" 
+                            max="1.2" 
+                            step="0.05" 
+                            value={settings.uiSettings.zoomLevel || 1.0} 
+                            onChange={(e) => handleZoomUpdate(Number(e.target.value))} 
+                            className="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-fuchsia-500"
+                          />
+                          <div className="flex justify-between text-[10px] text-slate-500 font-mono">
+                              <span>50%</span>
+                              <span>Mobile (60%)</span>
+                              <span>PC (100%)</span>
+                              <span>120%</span>
+                          </div>
+                      </div>
+
                       <div className="glass-panel p-6 rounded-2xl flex items-center justify-between">
                           <div>
                               <div className="font-bold text-slate-200">Giảm chuyển động (Reduce Motion)</div>
@@ -99,17 +148,6 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
                               <option value="medium">Vừa</option>
                               <option value="large">Lớn</option>
                           </select>
-                      </div>
-                      <div className="glass-panel p-6 rounded-2xl flex items-center justify-between opacity-60 pointer-events-none grayscale">
-                           <div>
-                              <div className="font-bold text-slate-200">Màu chủ đạo (Theme)</div>
-                              <div className="text-xs text-slate-500">Tính năng đang phát triển.</div>
-                          </div>
-                          <div className="flex gap-2">
-                              {['bg-fuchsia-500', 'bg-cyan-500', 'bg-emerald-500'].map(bg => (
-                                  <div key={bg} className={`w-6 h-6 rounded-full ${bg} border-2 border-white/20`}></div>
-                              ))}
-                          </div>
                       </div>
                   </div>
               );
