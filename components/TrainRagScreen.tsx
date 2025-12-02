@@ -55,7 +55,9 @@ const TrainRagScreen: React.FC<TrainRagScreenProps> = ({ onBack }) => {
     const timestamp = new Date().toLocaleTimeString('vi-VN');
     addLog(`[${timestamp}] KHỞI TẠO TIẾN TRÌNH...`);
     addLog(`[${timestamp}] CẤU HÌNH: Size=${chunkSize}, Overlap=${chunkOverlap}`);
-    addLog(`[${timestamp}] ĐỌC FILE: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`);
+    // SAFEGUARD: Ensure file.size exists and is a number before accessing toFixed
+    const fileSizeKB = file.size ? (file.size / 1024) : 0;
+    addLog(`[${timestamp}] ĐỌC FILE: ${file.name} (${fileSizeKB.toFixed(2)} KB)`);
     
     // 1. Reading
     await simulateProgress(600, 0, 20);
@@ -142,7 +144,7 @@ const TrainRagScreen: React.FC<TrainRagScreenProps> = ({ onBack }) => {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen p-4 md:p-8">
+    <div className="flex items-center justify-center h-full min-h-full p-4 md:p-8">
       <div className="w-full max-w-4xl flex flex-col gap-6 animate-fade-in-up">
           
           {/* Header */}

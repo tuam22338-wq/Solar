@@ -1,7 +1,7 @@
 
 import React from 'react';
 
-type IconName = 'play' | 'save' | 'upload' | 'news' | 'settings' | 'world' | 'user' | 'rules' | 'entity' | 'difficulty' | 'goal' | 'back' | 'plus' | 'trash' | 'magic' | 'checkCircle' | 'xCircle' | 'key' | 'warning' | 'status' | 'companions' | 'quest' | 'memory' | 'info' | 'restart' | 'arrowUp' | 'arrowDown' | 'ellipsisVertical' | 'sun' | 'rain' | 'cloud' | 'storm' | 'snow' | 'fog' | 'cpu' | 'database' | 'download' | 'palette' | 'volume' | 'shieldCheck' | 'sliders' | 'terminal' | 'book' | 'tag' | 'search';
+type IconName = 'play' | 'save' | 'upload' | 'news' | 'settings' | 'world' | 'user' | 'rules' | 'entity' | 'difficulty' | 'goal' | 'back' | 'plus' | 'trash' | 'magic' | 'checkCircle' | 'xCircle' | 'key' | 'warning' | 'status' | 'companions' | 'quest' | 'memory' | 'info' | 'restart' | 'arrowUp' | 'arrowDown' | 'ellipsisVertical' | 'sun' | 'rain' | 'cloud' | 'storm' | 'snow' | 'fog' | 'cpu' | 'database' | 'download' | 'palette' | 'volume' | 'shieldCheck' | 'sliders' | 'terminal' | 'book' | 'tag' | 'search' | 'desktop' | 'smartphone';
 
 interface IconProps extends React.SVGProps<SVGSVGElement> {
   name: IconName;
@@ -54,7 +54,9 @@ const Icon: React.FC<IconProps> = ({ name, className = 'w-6 h-6', title, ...prop
     terminal: <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18.75V5.25A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25v13.5A2.25 2.25 0 005.25 21z" />,
     book: <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />,
     tag: <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3zM6 6a.75.75 0 100 1.5.75.75 0 000-1.5z" />,
-    search: <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+    search: <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />,
+    desktop: <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25" />,
+    smartphone: <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5h3m-6.75 2.25h10.5a2.25 2.25 0 002.25-2.25v-15a2.25 2.25 0 00-2.25-2.25H6.75A2.25 2.25 0 004.5 4.5v15a2.25 2.25 0 002.25 2.25z" />
   };
 
   return (

@@ -8,7 +8,11 @@ export const getSettings = (): AppSettings => {
   try {
     const storedSettings = localStorage.getItem(SETTINGS_STORAGE_KEY);
     if (storedSettings) {
-      const parsed = JSON.parse(storedSettings) as AppSettings;
+      const parsed = JSON.parse(storedSettings);
+      
+      // Ensure parsed is an object and not null
+      if (typeof parsed !== 'object' || parsed === null) return DEFAULT_SETTINGS;
+
       // Basic validation to ensure the structure is not completely broken from an old version
       // Merge with default settings to ensure new fields (like aiSettings) exist if loading old data
       return {
@@ -16,6 +20,7 @@ export const getSettings = (): AppSettings => {
           ...parsed,
           apiKeyConfig: { ...DEFAULT_SETTINGS.apiKeyConfig, ...(parsed.apiKeyConfig || {}) },
           safetySettings: { ...DEFAULT_SETTINGS.safetySettings, ...(parsed.safetySettings || {}) },
+          // Deep merge aiSettings to pick up new properties (thinkingBudget, maxOutputTokens, etc.) from defaults
           aiSettings: { ...DEFAULT_SETTINGS.aiSettings, ...(parsed.aiSettings || {}) },
           uiSettings: { ...DEFAULT_SETTINGS.uiSettings, ...(parsed.uiSettings || {}) },
           audioSettings: { ...DEFAULT_SETTINGS.audioSettings, ...(parsed.audioSettings || {}) }

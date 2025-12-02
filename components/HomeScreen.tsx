@@ -1,3 +1,4 @@
+
 import React, { useRef, useState, useEffect } from 'react';
 import Button from './common/Button';
 import Icon from './common/Icon';
@@ -222,8 +223,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ onStartNew, onLoadGame, onNavig
         messages={['Chức năng này hiện chưa hoàn thiện và sẽ sớm được cập nhật trong các phiên bản sau.']}
       />
       
-      {/* Container changed to flex-col with min-h-[100dvh] to ensure footer sits at bottom properly */}
-      <div className="flex flex-col min-h-[100dvh] w-full relative z-10">
+      {/* Container changed to h-full to fit scaled parent */}
+      <div className="flex flex-col h-full min-h-full w-full relative z-10">
         
         {/* Main Content (Centered) */}
         <div className="flex-1 flex flex-col items-center justify-center p-4">

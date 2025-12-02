@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { GameTurn, GameState, TemporaryRule, CharacterConfig, WorldTime, Quest, WeatherType, CodexEntry } from '../types';
 import * as aiService from '../services/aiService';
@@ -12,33 +11,32 @@ import CodexModal from './CodexModal';
 
 // --- Helper to clean AI text ---
 const cleanAndFormatContent = (content: string) => {
-    // 1. Remove <state> tags content completely
     let cleaned = content.replace(/<state>[\s\S]*?<\/state>/gi, '');
-    
-    // 2. Remove <thought> tags content completely (per user request to reduce clutter)
     cleaned = cleaned.replace(/<thought>[\s\S]*?<\/thought>/gi, '');
-
-    // 3. Remove <exp> tags but keep content (optional, or style it)
-    // We can keep <exp> for FormattedNarration to handle if we want sound effects, 
-    // but for "reading mode" let's keep them styled.
-
     return cleaned.trim();
 };
 
-const FormattedNarration: React.FC<{ content: string }> = React.memo(({ content }) => {
+const getTextSizeClass = (size: 'small' | 'medium' | 'large' = 'medium') => {
+    switch(size) {
+        case 'small': return 'text-sm md:text-base leading-relaxed'; // Smaller
+        case 'large': return 'text-xl md:text-3xl leading-loose'; // Much Larger
+        case 'medium': 
+        default: return 'text-base md:text-xl leading-relaxed'; // Standard
+    }
+};
+
+const FormattedNarration: React.FC<{ content: string; textSize?: 'small' | 'medium' | 'large' }> = React.memo(({ content, textSize }) => {
     const cleanedContent = cleanAndFormatContent(content);
-    
-    // Split by double newlines to create paragraphs
     const paragraphs = cleanedContent.split(/\n\s*\n/).filter(Boolean);
+    const sizeClass = getTextSizeClass(textSize);
 
     return (
         <div className="prose prose-invert max-w-none">
             {paragraphs.map((para, index) => {
-                // Handle bolding **text**
                 const parts = para.split(/(\*\*.*?\*\*|<exp>.*?<\/exp>)/g).filter(Boolean);
                 
                 return (
-                    <p key={index} className="mb-6 text-slate-200 text-lg leading-relaxed font-serif tracking-wide text-justify">
+                    <p key={index} className={`mb-6 text-slate-200 font-serif tracking-wide text-justify ${sizeClass}`}>
                         {parts.map((part, i) => {
                             if (part.startsWith('**') && part.endsWith('**')) {
                                 return <strong key={i} className="text-fuchsia-200 font-bold">{part.slice(2, -2)}</strong>;
@@ -58,9 +56,11 @@ const FormattedNarration: React.FC<{ content: string }> = React.memo(({ content 
 interface GameplayScreenProps {
   initialGameState: GameState;
   onBack: () => void;
+  textSize?: 'small' | 'medium' | 'large';
+  isDesktopMode?: boolean; // Force desktop layout even on small screens
 }
 
-const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBack }) => {
+const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBack, textSize = 'medium', isDesktopMode = false }) => {
   const [gameState, setGameState] = useState<GameState>(initialGameState);
   const [playerInput, setPlayerInput] = useState('');
   const [isLoading, setIsLoading] = useState(initialGameState.history.length === 0);
@@ -71,20 +71,15 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
   const [lastStateUpdate, setLastStateUpdate] = useState<any>(null);
   
   // Pagination State
-  // Calculate total logical pages. 
-  // Page 1 = Intro (Turn 0)
-  // Page N = Action (Turn 2N-1) + Narration (Turn 2N)
   const historyPairs = useMemo(() => {
       const pairs: GameTurn[][] = [];
       const h = gameState.history;
       if (h.length === 0) return [];
       
-      // First narration is standalone (Page 1)
       if (h[0].type === 'narration') {
           pairs.push([h[0]]);
       }
 
-      // Subsequent turns should be Action + Narration pairs
       for (let i = 1; i < h.length; i++) {
           if (h[i].type === 'action') {
               const pair = [h[i]];
@@ -99,7 +94,6 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
 
   const [currentPage, setCurrentPage] = useState<number>(historyPairs.length > 0 ? historyPairs.length - 1 : 0);
 
-  // Auto-advance page when history updates
   useEffect(() => {
       if (historyPairs.length > 0) {
           setCurrentPage(historyPairs.length - 1);
@@ -108,8 +102,6 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
 
   const isInitialLoading = isLoading && gameState.history.length === 0;
   
-  // --- Game Logic ---
-
   const startGame = useCallback(async () => {
     if (gameState.history.length > 0) { setIsLoading(false); return; }
     setIsLoading(true); setError(null);
@@ -124,18 +116,15 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
 
   useEffect(() => { startGame(); }, [startGame]);
   
-  // Handle AI Expansion of Codex Entry
   const handleExpandCodexEntry = async (entry: CodexEntry) => {
       const expanded = await aiService.expandCodexEntry(gameState.worldConfig, entry);
-      
-      // Update state
       setGameState(prev => {
           const newCodex = prev.codex.map(c => {
               if (c.id === entry.id) {
                   return {
                       ...c,
                       ...expanded,
-                      description: expanded.description || c.description, // Fallback if empty
+                      description: expanded.description || c.description,
                       tags: [...new Set([...c.tags, ...(expanded.tags || [])])],
                       relations: [...(c.relations || []), ...(expanded.relations || [])],
                       lastUpdated: new Date().toISOString()
@@ -144,7 +133,7 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
               return c;
           });
           const newState = { ...prev, codex: newCodex };
-          gameService.saveGame(newState); // Auto-save
+          gameService.saveGame(newState);
           return newState;
       });
   };
@@ -153,32 +142,23 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
       const newState = { ...currentState };
       let character = { ...newState.worldConfig.character };
       
-      // Update Inventory
       if (update.inventory_add && Array.isArray(update.inventory_add)) {
           character.inventory = [...character.inventory, ...update.inventory_add];
       }
       if (update.inventory_remove && Array.isArray(update.inventory_remove)) {
           character.inventory = character.inventory.filter(item => !update.inventory_remove.includes(item));
       }
-
-      // Update HP
       if (update.hp_change) {
           character.hp = Math.min(character.maxHp, Math.max(0, character.hp + update.hp_change));
       }
-
-      // Update Gold
       if (update.gold_change) {
           character.gold = Math.max(0, character.gold + update.gold_change);
       }
-
-      // Level Up
       if (update.level_up) {
           character.level += 1;
           character.maxHp += 10;
           character.hp = character.maxHp; 
       }
-
-      // Status Effects
       if (update.status_add && Array.isArray(update.status_add)) {
            const newEffects = update.status_add.filter((e: string) => !character.statusEffects.includes(e));
            character.statusEffects = [...character.statusEffects, ...newEffects];
@@ -186,47 +166,31 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
       if (update.status_remove && Array.isArray(update.status_remove)) {
            character.statusEffects = character.statusEffects.filter(e => !update.status_remove.includes(e));
       }
-
-      // TIER 3 UPDATES: TIME SYSTEM (Calendar Logic)
       if (update.time_passed) {
           let minutesToAdd = update.time_passed;
           let current = { ...newState.worldTime };
-
           current.minute += minutesToAdd;
-          
-          // Minutes -> Hours
           while (current.minute >= 60) {
               current.minute -= 60;
               current.hour += 1;
           }
-          
-          // Hours -> Days
           while (current.hour >= 24) {
               current.hour -= 24;
               current.day += 1;
           }
-
-          // Days -> Months (Simplified: 30 days = 1 month)
           while (current.day > 30) {
               current.day -= 30;
               current.month += 1;
           }
-
-          // Months -> Years (12 months = 1 year)
           while (current.month > 12) {
               current.month -= 12;
               current.year += 1;
           }
-
           newState.worldTime = current;
       }
-
-      // Weather
       if (update.weather_update) {
           newState.weather = update.weather_update as WeatherType;
       }
-
-      // Quests
       if (update.quest_update && Array.isArray(update.quest_update)) {
           update.quest_update.forEach((qUpdate: any) => {
               if (qUpdate.action === 'add') {
@@ -246,31 +210,24 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
               }
           });
       }
-      
-      // Player Analysis
       if (update.player_behavior_tag) {
           newState.playerAnalysis = {
               ...newState.playerAnalysis,
               behaviorTags: [...newState.playerAnalysis.behaviorTags, update.player_behavior_tag]
           };
       }
-
-      // CODEX UPDATE (Tier 3.5 + 4)
       if (update.codex_update && Array.isArray(update.codex_update)) {
           const newCodex = [...(newState.codex || [])];
           update.codex_update.forEach((entry: Partial<CodexEntry>) => {
               if (!entry.id || !entry.name) return;
-              
               const existingIndex = newCodex.findIndex(c => c.id === entry.id);
               const now = new Date().toISOString();
-
               if (existingIndex >= 0) {
-                  // Update existing
                   newCodex[existingIndex] = {
                       ...newCodex[existingIndex],
                       ...entry,
                       description: entry.description 
-                          ? newCodex[existingIndex].description + "\n\n" + entry.description // Append instead of overwrite for Dynamic Extraction
+                          ? newCodex[existingIndex].description + "\n\n" + entry.description 
                           : newCodex[existingIndex].description,
                       tags: [...new Set([...newCodex[existingIndex].tags, ...(entry.tags || [])])],
                       relations: [...(newCodex[existingIndex].relations || []), ...(entry.relations || [])],
@@ -278,7 +235,6 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
                       isNew: true
                   };
               } else {
-                  // Add new
                   newCodex.push({
                       id: entry.id,
                       name: entry.name,
@@ -293,47 +249,36 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
           });
           newState.codex = newCodex;
       }
-
       newState.worldConfig.character = character;
       return newState;
   };
 
   const handleSendAction = async () => {
     if (!playerInput.trim() || isLoading) return;
-    
     const newAction: GameTurn = { type: 'action', content: playerInput.trim() };
     const tempHistory = [...gameState.history, newAction];
     setGameState(prev => ({ ...prev, history: tempHistory }));
     setPlayerInput('');
-    
     setIsLoading(true); setError(null);
     try {
       const { narration, newSummary, truncatedHistory, stateUpdate } = await aiService.getNextTurn(gameState.worldConfig, tempHistory, gameState.summary, gameState);
-      
       let finalHistory: GameTurn[];
-
       if (truncatedHistory) {
           finalHistory = [...truncatedHistory, { type: 'narration', content: narration }];
       } else {
           finalHistory = [...tempHistory, { type: 'narration', content: narration }];
       }
-
       let nextGameState = { ...gameState };
       nextGameState.history = finalHistory;
       if (newSummary) nextGameState.summary = newSummary;
-
       if (stateUpdate) {
           setLastStateUpdate(stateUpdate);
           nextGameState = applyStateUpdate(nextGameState, stateUpdate);
           setTimeout(() => setLastStateUpdate(null), 5000);
       }
-
       setGameState(nextGameState);
       gameService.saveGame(nextGameState);
-
-    } catch (e) { 
-        setError(e instanceof Error ? e.message : 'Lỗi AI.'); 
-    } 
+    } catch (e) { setError(e instanceof Error ? e.message : 'Lỗi AI.'); } 
     finally { setIsLoading(false); }
   };
   
@@ -351,6 +296,11 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
   
   const currentPair = historyPairs[currentPage] || [];
   
+  // Use isDesktopMode to force sidebar visibility (override tailwind 'hidden lg:flex' if true)
+  const sidebarClasses = isDesktopMode 
+      ? "flex flex-col w-72 glass-panel border-r border-white/5 p-6 z-20 h-full backdrop-blur-2xl"
+      : "hidden lg:flex flex-col w-72 glass-panel border-r border-white/5 p-6 z-20 h-full backdrop-blur-2xl";
+
   return (
     <>
       <TemporaryRulesModal isOpen={isTempRulesModalOpen} onClose={() => setIsTempRulesModalOpen(false)} onSave={(r) => {
@@ -358,12 +308,7 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
           setGameState(u); gameService.saveGame(u); setIsTempRulesModalOpen(false);
       }} initialRules={gameState.worldConfig.temporaryRules} />
       
-      <CodexModal 
-        isOpen={isCodexOpen} 
-        onClose={() => setIsCodexOpen(false)} 
-        entries={gameState.codex || []} 
-        onExpandEntry={handleExpandCodexEntry}
-      />
+      <CodexModal isOpen={isCodexOpen} onClose={() => setIsCodexOpen(false)} entries={gameState.codex || []} onExpandEntry={handleExpandCodexEntry}/>
 
       {showExitConfirm && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[100] p-4">
@@ -378,21 +323,16 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
         </div>
       )}
 
-      {/* Main Layout */}
-      <div className="flex h-screen w-full overflow-hidden bg-slate-950 relative">
-        
-        {/* Background Overlay */}
+      {/* Changed h-screen to h-full for scaling compatibility */}
+      <div className="flex h-full w-full overflow-hidden bg-slate-950 relative">
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-slate-950/50 pointer-events-none z-10"></div>
 
-        {/* TOP HUD (Center Floating) */}
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 animate-fade-in-up">
             <div className="glass-strong rounded-full px-5 py-2 flex items-center gap-4 border-white/10 shadow-lg bg-slate-900/60 backdrop-blur-xl">
-                 {/* Weather */}
                  <div className="flex items-center gap-2 border-r border-white/10 pr-4">
                      <Icon name={getWeatherIcon(gameState.weather) as any} className="w-5 h-5 text-amber-300 drop-shadow-md" />
                      <span className="text-xs font-bold text-slate-200 hidden sm:inline">{WEATHER_TRANSLATIONS[gameState.weather]}</span>
                  </div>
-                 {/* Time */}
                  <div className="flex items-center gap-2 text-xs font-mono text-slate-300">
                      <span className="text-fuchsia-300 font-bold">
                         {gameState.worldTime.hour.toString().padStart(2, '0')}:{gameState.worldTime.minute.toString().padStart(2, '0')}
@@ -405,14 +345,13 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
             </div>
         </div>
 
-        {/* Left Sidebar (Hidden on Mobile) */}
-        <div className="hidden lg:flex flex-col w-72 glass-panel border-r border-white/5 p-6 z-20 h-full backdrop-blur-2xl">
+        {/* SIDEBAR */}
+        <div className={sidebarClasses}>
             <div className="mb-6 mt-12">
                 <h1 className="font-black text-xl text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-400 to-indigo-400 truncate">{gameState.worldConfig.storyContext.genre}</h1>
             </div>
             
             <div className="space-y-4 flex-1 overflow-y-auto pr-1 custom-scrollbar">
-                {/* Character Widget */}
                 <div className="glass-strong bg-slate-900/50 p-4 rounded-2xl border border-white/5 shadow-inner">
                     <div className="text-xs font-bold text-slate-500 uppercase mb-3 flex items-center gap-2">
                         <Icon name="user" className="w-3 h-3"/> Nhân Vật
@@ -421,8 +360,6 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
                         <span className="truncate">{gameState.worldConfig.character.name}</span>
                         <span className="text-[10px] bg-fuchsia-500/20 text-fuchsia-300 px-2 py-0.5 rounded-full border border-fuchsia-500/30">Lv.{gameState.worldConfig.character.level || 1}</span>
                     </div>
-                    
-                    {/* HP Bar */}
                     <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden mb-2 mt-2">
                         <div className="bg-red-500 h-full transition-all duration-500" style={{width: `${(gameState.worldConfig.character.hp / gameState.worldConfig.character.maxHp) * 100}%`}}></div>
                     </div>
@@ -432,7 +369,6 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
                     </div>
                 </div>
 
-                {/* Codex Button (New) */}
                 <button onClick={() => setIsCodexOpen(true)} className="w-full glass-strong bg-indigo-900/20 hover:bg-indigo-900/40 p-4 rounded-2xl border border-indigo-500/20 flex items-center gap-3 transition-all group">
                     <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center text-indigo-400 group-hover:scale-110 transition-transform">
                         <Icon name="book" className="w-5 h-5"/>
@@ -443,7 +379,6 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
                     </div>
                 </button>
 
-                {/* Quest Log */}
                 <div className="glass-strong bg-amber-900/10 p-4 rounded-2xl border border-amber-500/20">
                     <div className="text-xs font-bold text-amber-500 uppercase mb-3 flex items-center gap-2">
                         <Icon name="quest" className="w-3 h-3"/> Nhiệm Vụ
@@ -462,7 +397,6 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
                     )}
                 </div>
 
-                {/* Inventory */}
                 <div className="glass-strong bg-slate-900/50 p-4 rounded-2xl border border-white/5">
                     <div className="text-xs font-bold text-slate-500 uppercase mb-3 flex items-center gap-2">
                         <Icon name="database" className="w-3 h-3"/> Hành Trang
@@ -480,19 +414,22 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
             </div>
         </div>
 
-        {/* Main Reading Area */}
+        {/* MAIN AREA */}
         <div className="flex-1 flex flex-col relative h-full z-10 bg-slate-950/80">
             
-            {/* Mobile Header Buttons (Top Right/Left) */}
-            <div className="lg:hidden absolute top-4 right-4 z-40 flex gap-2">
-                <button onClick={() => setIsCodexOpen(true)} className="p-2 glass-panel rounded-full text-indigo-400"><Icon name="book" className="w-5 h-5"/></button>
-                <button onClick={() => setShowExitConfirm(true)} className="p-2 glass-panel rounded-full text-red-400"><Icon name="xCircle" className="w-5 h-5"/></button>
-            </div>
-            <div className="lg:hidden absolute top-4 left-4 z-40">
-                 <button onClick={() => setIsTempRulesModalOpen(true)} className="p-2 glass-panel rounded-full text-slate-400"><Icon name="rules" className="w-5 h-5"/></button>
-            </div>
+            {/* Mobile Header Buttons (Top Right/Left) - HIDDEN IF DESKTOP MODE IS FORCED (because Sidebar has these) */}
+            {!isDesktopMode && (
+                <>
+                <div className="lg:hidden absolute top-4 right-4 z-40 flex gap-2">
+                    <button onClick={() => setIsCodexOpen(true)} className="p-2 glass-panel rounded-full text-indigo-400"><Icon name="book" className="w-5 h-5"/></button>
+                    <button onClick={() => setShowExitConfirm(true)} className="p-2 glass-panel rounded-full text-red-400"><Icon name="xCircle" className="w-5 h-5"/></button>
+                </div>
+                <div className="lg:hidden absolute top-4 left-4 z-40">
+                    <button onClick={() => setIsTempRulesModalOpen(true)} className="p-2 glass-panel rounded-full text-slate-400"><Icon name="rules" className="w-5 h-5"/></button>
+                </div>
+                </>
+            )}
 
-            {/* Pagination / Navigation Bar (Top of Text) */}
             <div className="flex justify-center items-center py-4 mt-16 lg:mt-16 z-30 pointer-events-none">
                  <div className="glass-strong rounded-full px-2 py-1 flex items-center gap-4 pointer-events-auto shadow-lg">
                       <button 
@@ -515,7 +452,6 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
                  </div>
             </div>
 
-            {/* Content Display (The Book Page) */}
             <div className="flex-1 overflow-y-auto px-4 sm:px-12 md:px-24 pb-32 scroll-smooth custom-scrollbar">
                 {isInitialLoading ? (
                     <div className="h-full flex flex-col items-center justify-center">
@@ -535,7 +471,7 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
                                 ) : (
                                     <div className="relative">
                                         <div className="absolute -left-6 top-1 text-fuchsia-500/30 font-serif text-4xl leading-none">“</div>
-                                        <FormattedNarration content={turn.content} />
+                                        <FormattedNarration content={turn.content} textSize={textSize} />
                                     </div>
                                 )}
                             </div>
@@ -551,7 +487,6 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
                 )}
             </div>
 
-            {/* Input Area (Bottom) */}
             <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-8 bg-gradient-to-t from-slate-950 via-slate-950/90 to-transparent z-40">
                 <div className="max-w-3xl mx-auto glass-strong rounded-[2rem] p-2 pl-6 flex items-end gap-2 shadow-[0_0_60px_rgba(0,0,0,0.6)] border-t border-white/10 ring-1 ring-white/5 transition-all focus-within:ring-fuchsia-500/50 focus-within:border-fuchsia-500/50 bg-slate-900/80 backdrop-blur-xl">
                     <textarea
@@ -578,7 +513,6 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
                 {error && <p className="text-red-400 text-xs mt-3 text-center opacity-80">{error}</p>}
             </div>
             
-            {/* State Update Toast */}
             {lastStateUpdate && (
                 <div className="absolute bottom-28 right-6 z-50 animate-fade-in-up">
                     <div className="glass-panel p-4 rounded-xl border border-emerald-500/30 bg-emerald-900/20 shadow-lg max-w-xs">

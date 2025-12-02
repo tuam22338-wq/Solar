@@ -293,7 +293,7 @@ const WorldCreationScreen: React.FC<WorldCreationScreenProps> = ({ onBack, onSta
   ];
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-slate-950 text-slate-100">
+    <div className="flex flex-col h-full overflow-hidden bg-slate-950 text-slate-100">
       <ApiKeyModal isOpen={isApiKeyModalOpen} onSave={(key) => {
           const s = getSettings();
           saveSettings({ ...s, apiKeyConfig: { keys: [...s.apiKeyConfig.keys.filter(Boolean), key] } });
