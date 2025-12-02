@@ -85,6 +85,24 @@ export interface KnowledgeBase {
     chunks: string[];
 }
 
+export interface CodexRelation {
+    targetId: string; // The ID of the other entity
+    targetName: string;
+    type: string; // e.g., "Father", "Enemy", "Ally"
+    description?: string;
+}
+
+export interface CodexEntry {
+    id: string;
+    name: string;
+    type: 'Character' | 'Location' | 'Item' | 'Faction' | 'Concept' | 'Creature';
+    tags: string[]; // Auto-generated tags e.g. ["Merchant", "Hostile", "Magic"]
+    description: string;
+    relations?: CodexRelation[]; // Knowledge Graph Edges
+    lastUpdated: string; // ISO date string
+    isNew?: boolean; // UI flag for notification
+}
+
 // ------------------------
 
 export interface WorldConfig {
@@ -138,6 +156,15 @@ export interface AiGenerationSettings {
     enableSelfReflection: boolean; // Self-RAG + Chain-of-Note
     enableEnsembleModeling: boolean; // Multi-Agent Debate
     enableEmotionalIntelligence: boolean; // EQ Engine
+    enableMultimodalRag: boolean; // Visual Context Processing
+    enableVertexRag: boolean; // High Precision Retrieval
+    enableCodexProfiling: boolean; // Auto-generated Codex/Wiki
+    
+    // New Techniques
+    enableDynamicReference: boolean; // Dynamic Reference Tracking
+    enableAiTemplates: boolean; // AI-Generated Templates
+    enableRelationGraphs: boolean; // Knowledge Relation Graphs
+    enableDynamicExtraction: boolean; // Real-time Profiling
 
     // Advanced Config
     modelName: string;
@@ -189,6 +216,7 @@ export interface GameState {
   weather: WeatherType;
   questLog: Quest[];
   playerAnalysis: PlayerAnalysis;
+  codex: CodexEntry[]; // Dynamic Knowledge Base
 }
 
 export interface SaveSlot extends GameState {

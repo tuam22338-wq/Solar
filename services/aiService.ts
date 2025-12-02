@@ -1,8 +1,9 @@
 
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { getSettings } from './settingsService';
 // Fix: Moved ENTITY_TYPE_OPTIONS to be imported from constants.ts instead of types.ts
-import { WorldConfig, SafetySetting, SafetySettingsConfig, InitialEntity, GameTurn, CharacterConfig, GameState, WeatherType } from '../types';
+import { WorldConfig, SafetySetting, SafetySettingsConfig, InitialEntity, GameTurn, CharacterConfig, GameState, WeatherType, CodexEntry } from '../types';
 import { PERSONALITY_OPTIONS, GENDER_OPTIONS, DIFFICULTY_OPTIONS, ENTITY_TYPE_OPTIONS } from '../constants';
 
 
@@ -449,6 +450,44 @@ export async function generateWorldFromIdea(idea: string): Promise<WorldConfig> 
   return generateJson<WorldConfig>(prompt, schema);
 }
 
+// --- NEW FEATURE: AI Expand Codex Entry (AI-Generated Templates) ---
+export async function expandCodexEntry(config: WorldConfig, entry: CodexEntry, context?: string): Promise<Partial<CodexEntry>> {
+    const { storyContext } = config;
+    
+    const schema = {
+        type: Type.OBJECT,
+        properties: {
+            description: { type: Type.STRING, description: "Mô tả chi tiết, mở rộng (backstory, bí mật, ngoại hình)." },
+            tags: { type: Type.ARRAY, items: { type: Type.STRING }, description: "3-5 tags mới phù hợp." },
+            relations: {
+                type: Type.ARRAY,
+                items: {
+                    type: Type.OBJECT,
+                    properties: {
+                        targetName: { type: Type.STRING, description: "Tên nhân vật/phe phái liên quan." },
+                        type: { type: Type.STRING, description: "Loại quan hệ (Gia đình, Kẻ thù...)." }
+                    },
+                    required: ['targetName', 'type']
+                },
+                description: "Các mối quan hệ xã hội mới nếu có."
+            }
+        },
+        required: ['description', 'tags']
+    };
+
+    const prompt = `Bạn là hệ thống lưu trữ tri thức (Codex). 
+    Hãy mở rộng hồ sơ cho thực thể "${entry.name}" (${entry.type}) trong thế giới (Bối cảnh: ${storyContext.setting}).
+    Thông tin hiện tại: "${entry.description}".
+    
+    Yêu cầu:
+    1. Viết thêm chi tiết về quá khứ, ngoại hình hoặc bí mật ẩn giấu.
+    2. Đề xuất thêm các Tags phân loại.
+    3. (Tùy chọn) Gợi ý mối quan hệ với các nhân vật/phe phái khác trong thế giới.
+    `;
+
+    return generateJson<Partial<CodexEntry>>(prompt, schema);
+}
+
 
 export async function testApiKeys(): Promise<string> {
     const { apiKeyConfig } = getSettings();
@@ -615,11 +654,11 @@ const getAdultContentDirectives = (config: WorldConfig): string => {
   return directives.join('\n');
 }
 
-// --- Lore Injection Logic (RAG-Lite) ---
+// --- Lore Injection Logic (RAG-Lite + Dynamic Reference Tracking) ---
 
-const getRelevantLore = (config: WorldConfig, recentHistory: GameTurn[], input: string): string => {
+const getRelevantLore = (config: WorldConfig, recentHistory: GameTurn[], input: string, codex: CodexEntry[] = []): string => {
     // 1. Collect all keywords from World Lore and Entities
-    const keywords: { term: string, description: string }[] = [];
+    const keywords: { term: string, description: string, aliases?: string[] }[] = [];
     
     // Factions
     config.worldLore.factions.forEach(f => {
@@ -635,6 +674,16 @@ const getRelevantLore = (config: WorldConfig, recentHistory: GameTurn[], input: 
     config.character.relationships.forEach(r => {
         keywords.push({ term: r.name, description: `[Quan Hệ] ${r.name} (${r.type}): ${r.description}` });
     });
+    
+    // Codex Dynamic Reference
+    const settings = getSettings();
+    if (settings.aiSettings.enableDynamicReference) {
+        codex.forEach(c => {
+             // Basic term
+             keywords.push({ term: c.name, description: `[Codex: ${c.type}] ${c.name}: ${c.description}` });
+             // If we had aliases in codex, we would push them here too
+        });
+    }
 
     // 2. Scan recent text (last 2 turns + current input)
     const textToScan = [
@@ -642,13 +691,17 @@ const getRelevantLore = (config: WorldConfig, recentHistory: GameTurn[], input: 
         input
     ].join(' ').toLowerCase();
 
-    // 3. Find matches
+    // 3. Find matches (Smart Matching)
+    // We filter matches to avoid duplication and only include relevant info
     const matches = keywords.filter(k => textToScan.includes(k.term.toLowerCase()));
     
-    if (matches.length === 0) return '';
+    // De-duplicate descriptions
+    const uniqueDescriptions = Array.from(new Set(matches.map(m => m.description)));
+    
+    if (uniqueDescriptions.length === 0) return '';
 
     // 4. Format for injection
-    return `\n\n--- THÔNG TIN THẾ GIỚI LIÊN QUAN (LORE) ---\nĐể đảm bảo tính nhất quán, hãy lưu ý các thông tin sau nếu chúng xuất hiện trong ngữ cảnh:\n${matches.map(m => `- ${m.description}`).join('\n')}`;
+    return `\n\n--- THÔNG TIN THẾ GIỚI LIÊN QUAN (LORE / CODEX) ---\nĐể đảm bảo tính nhất quán, hãy lưu ý các thông tin sau nếu chúng xuất hiện trong ngữ cảnh:\n${uniqueDescriptions.map(d => `- ${d}`).join('\n')}`;
 };
 
 
@@ -711,6 +764,33 @@ const getGameMasterSystemInstruction = (config: WorldConfig): string => {
     const eqInstruction = aiSettings.enableEmotionalIntelligence ? `
     - **EQ Engine:** Xác định "Biểu đồ cảm xúc" (Emotional Arc) của cảnh hiện tại (VD: Căng thẳng -> Cao trào -> Giải tỏa). Chọn từ ngữ và nhịp độ câu văn để phù hợp với trạng thái cảm xúc đó.
     ` : '';
+    
+    // --- MODULE: Multimodal RAG ---
+    const multimodalRagInstruction = aiSettings.enableMultimodalRag ? `
+    - **Multimodal RAG:** Tăng cường khả năng xử lý mô tả thị giác. Khi miêu tả môi trường hoặc nhân vật, hãy coi các yếu tố hình ảnh (màu sắc, ánh sáng, hình khối) là dữ liệu truy xuất quan trọng. Đảm bảo tính nhất quán tuyệt đối về mặt thị giác (Visual Consistency).
+    ` : '';
+
+    // --- MODULE: Vertex AI RAG Engine (Simulated) ---
+    const vertexRagInstruction = aiSettings.enableVertexRag ? `
+    - **Vertex AI RAG Engine (Simulated):** Áp dụng tiêu chuẩn truy xuất thông tin chính xác cao (Grounding). Khi nhắc đến Lịch sử, Địa lý hoặc các Phe phái đã được thiết lập trong Lore, hãy ưu tiên sự thật (Truthfulness) hơn là sáng tạo ngẫu nhiên. Trích dẫn thông tin chính xác từ cấu hình thế giới.
+    ` : '';
+
+    // --- MODULE: Codex/Character Profiling & Dynamic Extraction ---
+    const codexInstruction = aiSettings.enableCodexProfiling ? `
+    - **Codex Profiling (HỆ THỐNG TRI THỨC):** Bạn kiêm nhiệm vai trò "Thư Ký Đại Tài". Đừng để thông tin trôi qua lãng phí.
+      KHI NÀO CẦN CẬP NHẬT CODEX?
+      1. Gặp nhân vật/địa điểm/vật phẩm MỚI -> Tạo entry mới.
+      2. Biết thêm thông tin về nhân vật CŨ (quá khứ, sở thích, bí mật, ngoại hình) -> Cập nhật entry cũ (hệ thống sẽ tự merge).
+      3. Thay đổi quan hệ (Bạn -> Thù, Gặp gỡ lần đầu) -> Cập nhật trường 'relations'.
+      
+      ${aiSettings.enableDynamicExtraction ? '**CHẾ ĐỘ DYNAMIC EXTRACTION (REAL-TIME):** Hãy chủ động "quét" từng câu chữ trong phản hồi của bạn. Nếu NPC tiết lộ tên, quá khứ, hay thể hiện thái độ đặc biệt, hãy cập nhật ngay lập tức vào <state>. Đừng chờ đợi.' : ''}
+      
+      Sử dụng trường "codex_update" trong thẻ <state> (JSON) để thực hiện.` : '';
+    
+    // --- MODULE: Relation Graphs ---
+    const relationGraphInstruction = aiSettings.enableRelationGraphs ? `
+    - **Relation Graphs:** Hãy chú ý đến mạng lưới quan hệ xã hội. Hành động của người chơi với NPC A sẽ ảnh hưởng đến NPC B nếu họ có quan hệ (Gia đình, Đồng minh). Hãy cập nhật các mối quan hệ mới trong "codex_update" (trường 'relations').
+    ` : '';
 
     // --- MODULE: Chain-of-Thought (ToT) & Self-Reflection ---
     const totInstruction = aiSettings.enableChainOfThought ? `
@@ -746,6 +826,10 @@ ${memoryBankInstruction}
 ${selfReflectionInstruction}
 ${ensembleInstruction}
 ${eqInstruction}
+${multimodalRagInstruction}
+${vertexRagInstruction}
+${codexInstruction}
+${relationGraphInstruction}
 
 --- QUY TRÌNH SUY LUẬN (BẮT BUỘC) ---
 TRƯỚC KHI viết lời dẫn truyện chính thức, bạn phải tự suy nghĩ trong thẻ <thought>.
@@ -753,10 +837,11 @@ ${totInstruction}
 
 Nội dung trong <thought> phải bao gồm các bước (tùy theo module được bật):
 1. **Analysis:** Ý định người chơi (CoN) & Biểu đồ cảm xúc (EQ).
-2. **Debate (Ensemble):** Tranh luận giữa các nhân cách (Narrator/Designer/Historian).
-3. **Simulation (ToT):** Giả lập 3 nhánh cốt truyện.
-4. **Planning:** Cập nhật Graph & Dàn ý đệ quy.
-5. **Decision:** Kết quả cuối cùng để viết ra.
+2. **Retrieval:** Truy xuất Lore chính xác (Vertex RAG) & Hình ảnh (Multimodal RAG).
+3. **Debate (Ensemble):** Tranh luận giữa các nhân cách (Narrator/Designer/Historian).
+4. **Simulation (ToT):** Giả lập 3 nhánh cốt truyện.
+5. **Planning:** Cập nhật Graph & Dàn ý đệ quy.
+6. **Decision:** Kết quả cuối cùng để viết ra.
 
 Ví dụ cấu trúc <thought>:
 [Analysis] Người chơi muốn leo tường. Mood: Căng thẳng.
@@ -766,7 +851,7 @@ Ví dụ cấu trúc <thought>:
 </thought>
 
 10. **QUẢN LÝ TRẠNG THÁI (STATE MANAGEMENT):**
-    Cuối mỗi phản hồi, nếu có sự thay đổi về Kho Đồ, Máu, Vàng, Thời gian, Nhiệm vụ, xuất thẻ <state>JSON</state>.
+    Cuối mỗi phản hồi, nếu có sự thay đổi về Kho Đồ, Máu, Vàng, Thời gian, Nhiệm vụ, hoặc thông tin Codex mới, xuất thẻ <state>JSON</state>.
     Cấu trúc:
     <state>
     {
@@ -776,7 +861,19 @@ Ví dụ cấu trúc <thought>:
       "time_passed": 30,
       "weather_update": "Rainy",
       "quest_update": [],
-      "player_behavior_tag": "Aggressive"
+      "player_behavior_tag": "Aggressive",
+      "codex_update": [
+         {
+            "id": "unique_id_slug", // Quan trọng: Dùng ID cố định (VD: "npc_gandalf") để update entry cũ
+            "name": "Gandalf",
+            "type": "Character", // Character, Location, Item, Faction, Creature
+            "tags": ["Wizard", "Ally", "Powerful"],
+            "description": "Thông tin MỚI hoặc BỔ SUNG...",
+            "relations": [
+                 { "targetName": "Frodo", "type": "Mentor", "targetId": "npc_frodo" }
+            ]
+         }
+      ]
     }
     </state>
     **LƯU Ý:** Đặt thẻ <state> ở cuối cùng của phản hồi. Nó sẽ được hệ thống xử lý ẩn.
@@ -855,10 +952,10 @@ export const getNextTurn = async (config: WorldConfig, history: GameTurn[], curr
         }
     }).join('\n\n');
 
-    // 3. Dynamic Lore Injection
+    // 3. Dynamic Lore Injection (Now includes Codex Reference Tracking)
     const lastPlayerAction = history[history.length - 1]?.content || '';
-    const loreInjection = getRelevantLore(config, processedHistory, lastPlayerAction);
-
+    const loreInjection = getRelevantLore(config, processedHistory, lastPlayerAction, gameState.codex);
+    
     const activeTemporaryRules = config.temporaryRules?.filter(rule => rule.enabled).map(rule => `- ${rule.text}`).join('\n');
     const temporaryRulesPrompt = activeTemporaryRules 
         ? `\n\n--- LUẬT TẠM THỜI (QUAN TRỌNG) ---\nNgoài các luật lệ cốt lõi, hãy tuân thủ nghiêm ngặt các quy tắc hoặc tình huống tạm thời sau đây trong lượt này:\n${activeTemporaryRules}` 
@@ -873,6 +970,18 @@ export const getNextTurn = async (config: WorldConfig, history: GameTurn[], curr
     - Hồ sơ người chơi (Reputation): ${gameState.playerAnalysis.archetype} (Tags: ${gameState.playerAnalysis.behaviorTags.join(', ')})
     `;
 
+    // REINFORCEMENT PROMPT FOR DYNAMIC EXTRACTION
+    let extractionReinforcement = '';
+    if (getSettings().aiSettings.enableDynamicExtraction) {
+        extractionReinforcement = `
+    [SYSTEM NOTICE - DYNAMIC EXTRACTION]
+    Hãy rà soát lại nội dung bạn vừa viết. Có thông tin gì đáng lưu vào Codex không?
+    - NPC mới? Địa điểm mới?
+    - NPC cũ có tiết lộ gì thêm không?
+    - Quan hệ nhân vật có thay đổi không?
+    Nếu có, BẮT BUỘC phải xuất ra JSON trong thẻ <state> với trường "codex_update". Đừng lười biếng.
+    `;
+    }
 
     const prompt = `Đây là thông tin về thế giới và nhân vật (bao gồm trạng thái hiện tại):
     ${JSON.stringify({ ...config, temporaryRules: undefined }, null, 2)}
@@ -886,7 +995,9 @@ export const getNextTurn = async (config: WorldConfig, history: GameTurn[], curr
     ${formattedHistory}
 
     Dựa vào hành động mới nhất của người chơi, hãy tiếp tục câu chuyện. Mô tả kết quả của hành động đó, các sự kiện xảy ra tiếp theo, và phản ứng của thế giới/NPC. Hãy nhớ tuân thủ các quy tắc đã đặt ra. 
-    QUAN TRỌNG: Nếu có thay đổi về vật phẩm, máu, vàng, thời gian, nhiệm vụ, hãy sử dụng thẻ <state>JSON</state> ở cuối câu trả lời. Kết thúc bằng một câu hỏi cho người chơi.`;
+    QUAN TRỌNG: Nếu có thay đổi về vật phẩm, máu, vàng, thời gian, nhiệm vụ, hoặc thông tin Codex mới, hãy sử dụng thẻ <state>JSON</state> ở cuối câu trả lời.
+    ${extractionReinforcement}
+    Kết thúc bằng một câu hỏi cho người chơi.`;
 
     const rawNarration = await generate(prompt, systemInstruction);
     

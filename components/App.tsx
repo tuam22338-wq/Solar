@@ -1,4 +1,5 @@
 
+
 import React, { useState, useCallback } from 'react';
 import HomeScreen from './components/HomeScreen';
 import WorldCreationScreen from './components/WorldCreationScreen';
@@ -32,7 +33,8 @@ const App: React.FC = () => {
         worldTime: DEFAULT_WORLD_TIME,
         weather: 'Sunny',
         questLog: [],
-        playerAnalysis: DEFAULT_PLAYER_ANALYSIS
+        playerAnalysis: DEFAULT_PLAYER_ANALYSIS,
+        codex: [] // Initialize empty codex
     });
     setCurrentScreen('gameplay');
   }, []);
@@ -44,7 +46,8 @@ const App: React.FC = () => {
         worldTime: state.worldTime && state.worldTime.year ? state.worldTime : DEFAULT_WORLD_TIME,
         weather: state.weather || 'Sunny',
         questLog: state.questLog || [],
-        playerAnalysis: state.playerAnalysis || DEFAULT_PLAYER_ANALYSIS
+        playerAnalysis: state.playerAnalysis || DEFAULT_PLAYER_ANALYSIS,
+        codex: state.codex || []
     };
     setGameState(upgradedState);
     setCurrentScreen('gameplay');

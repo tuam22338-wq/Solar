@@ -157,6 +157,13 @@ export const DEFAULT_AI_SETTINGS: AiGenerationSettings = {
     enableSelfReflection: true,
     enableEnsembleModeling: true,
     enableEmotionalIntelligence: true,
+    enableMultimodalRag: true,
+    enableVertexRag: true,
+    enableCodexProfiling: true,
+    enableDynamicReference: true,
+    enableAiTemplates: true,
+    enableRelationGraphs: true,
+    enableDynamicExtraction: true,
     
     // Default Advanced Config
     modelName: 'gemini-2.5-flash',

@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect, useRef } from 'react';
 import { AppSettings, HarmBlockThreshold } from '../types';
 import { getSettings, saveSettings } from '../services/settingsService';
@@ -280,7 +282,17 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({ onBack }) => {
                            { id: 'enableChainOfThought', title: 'Tree of Thoughts (ToT)', desc: 'Giả lập 3 nhánh cốt truyện, đánh giá và chọn phương án tối ưu nhất.' },
                            { id: 'enableSelfReflection', title: 'Self-RAG + Chain-of-Note', desc: 'AI tự đánh giá độ chính xác thông tin và ghi chú ý định người chơi.' },
                            { id: 'enableEnsembleModeling', title: 'Ensemble Modeling (Đa Nhân Cách)', desc: 'Tranh luận nội bộ giữa: Narrator (Văn phong), Designer (Luật) và Historian (Lore).' },
-                           { id: 'enableEmotionalIntelligence', title: 'Emotional Intelligence (EQ)', desc: 'Phân tích biểu đồ cảm xúc để điều chỉnh giọng văn (Bi tráng, Hài hước...)' }
+                           { id: 'enableEmotionalIntelligence', title: 'Emotional Intelligence (EQ)', desc: 'Phân tích biểu đồ cảm xúc để điều chỉnh giọng văn (Bi tráng, Hài hước...)' },
+                           { id: 'enableMultimodalRag', title: 'Multimodal RAG', desc: 'Xử lý và đồng bộ dữ liệu hình ảnh/mô tả thị giác với văn bản để tăng tính chân thực.' },
+                           { id: 'enableVertexRag', title: 'Vertex AI RAG Engine', desc: 'Mô phỏng cơ chế truy xuất kiến thức chuẩn doanh nghiệp để tăng độ chính xác của Lore.' },
+                           { id: 'enableCodexProfiling', title: 'Codex/Character Profiling', desc: 'Tự động trích xuất và cập nhật hồ sơ Nhân vật/Thế giới (Wiki in-game).' },
+                           
+                           // New Techniques
+                           { id: 'enableDynamicReference', title: 'Dynamic Reference Tracking', desc: 'Tự động phát hiện và tiêm (inject) Codex entries vào ngữ cảnh để tăng tính nhất quán và tiết kiệm token.' },
+                           { id: 'enableAiTemplates', title: 'AI-Generated Templates', desc: 'Cho phép dùng AI để sinh chi tiết (backstory, bí mật) trực tiếp trong Codex.' },
+                           { id: 'enableRelationGraphs', title: 'Relation Graphs', desc: 'Xây dựng mạng lưới quan hệ giữa các NPC để duy trì tính nhất quán trong hành vi xã hội.' },
+                           { id: 'enableDynamicExtraction', title: 'Dynamic Extraction', desc: 'Quét log hội thoại để tự động cập nhật profile NPC (tính cách, ký ức) theo thời gian thực.' }
+
                        ].map((item) => (
                            <div key={item.id} className="glass-panel p-4 rounded-2xl flex items-center justify-between group hover:border-indigo-500/30 transition-all">
                                <div className="flex-1 pr-4">

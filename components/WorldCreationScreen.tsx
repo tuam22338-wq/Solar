@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useEffect } from 'react';
 import { WorldConfig, InitialEntity } from '../types';
 import { 
@@ -600,8 +601,19 @@ const WorldCreationScreen: React.FC<WorldCreationScreenProps> = ({ onBack, onSta
                                   <AiAssistButton isLoading={loadingStates['skills']} onClick={() => runAiAssist('skills', () => aiService.generateCharacterSkills(config), res => setConfig(prev => ({...prev, character: {...prev.character, skills: res}})))} className="!text-[10px] !py-1 !px-3 !bg-indigo-600 hover:!bg-indigo-500">Tạo kỹ năng</AiAssistButton>
                               </div>
                               <div className="relative z-10">
-                                  <input value={config.character.skills.name} onChange={e => setConfig(p => ({...p, character: {...p.character, skills: {...p.character.skills, name: e.target.value}}})} className="w-full bg-transparent border-b border-indigo-500/30 px-0 py-2 mb-2 font-bold text-indigo-300 text-lg placeholder:text-indigo-500/30 focus:outline-none focus:border-indigo-400 transition-colors" placeholder="Tên kỹ năng"/>
-                                  <textarea value={config.character.skills.description} onChange={e => setConfig(p => ({...p, character: {...p.character, skills: {...p.character.skills, description: e.target.value}}})} className="w-full bg-transparent border-none px-0 py-2 text-sm text-slate-300 placeholder:text-slate-600 focus:ring-0 resize-none" placeholder="Mô tả hiệu ứng và cách sử dụng..." rows={2}/>
+                                  <input 
+                                      value={config.character.skills.name} 
+                                      onChange={e => setConfig(p => ({...p, character: {...p.character, skills: {...p.character.skills, name: e.target.value}}}))} 
+                                      className="w-full bg-transparent border-b border-indigo-500/30 px-0 py-2 mb-2 font-bold text-indigo-300 text-lg placeholder:text-indigo-500/30 focus:outline-none focus:border-indigo-400 transition-colors" 
+                                      placeholder="Tên kỹ năng"
+                                  />
+                                  <textarea 
+                                      value={config.character.skills.description} 
+                                      onChange={e => setConfig(p => ({...p, character: {...p.character, skills: {...p.character.skills, description: e.target.value}}}))} 
+                                      className="w-full bg-transparent border-none px-0 py-2 text-sm text-slate-300 placeholder:text-slate-600 focus:ring-0 resize-none" 
+                                      placeholder="Mô tả hiệu ứng và cách sử dụng..." 
+                                      rows={2}
+                                  />
                               </div>
                           </div>
 

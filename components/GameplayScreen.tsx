@@ -1,12 +1,14 @@
 
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { GameTurn, GameState, TemporaryRule, CharacterConfig, WorldTime, Quest, WeatherType } from '../types';
+import { GameTurn, GameState, TemporaryRule, CharacterConfig, WorldTime, Quest, WeatherType, CodexEntry } from '../types';
 import * as aiService from '../services/aiService';
 import * as gameService from '../services/gameService';
 import { WEATHER_TRANSLATIONS } from '../constants';
 import Button from './common/Button';
 import Icon from './common/Icon';
 import TemporaryRulesModal from './TemporaryRulesModal';
+import CodexModal from './CodexModal';
 
 // --- Helper to clean AI text ---
 const cleanAndFormatContent = (content: string) => {
@@ -65,6 +67,7 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
   const [error, setError] = useState<string | null>(null);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [isTempRulesModalOpen, setIsTempRulesModalOpen] = useState(false);
+  const [isCodexOpen, setIsCodexOpen] = useState(false);
   const [lastStateUpdate, setLastStateUpdate] = useState<any>(null);
   
   // Pagination State
@@ -120,6 +123,31 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
   }, [gameState]);
 
   useEffect(() => { startGame(); }, [startGame]);
+  
+  // Handle AI Expansion of Codex Entry
+  const handleExpandCodexEntry = async (entry: CodexEntry) => {
+      const expanded = await aiService.expandCodexEntry(gameState.worldConfig, entry);
+      
+      // Update state
+      setGameState(prev => {
+          const newCodex = prev.codex.map(c => {
+              if (c.id === entry.id) {
+                  return {
+                      ...c,
+                      ...expanded,
+                      description: expanded.description || c.description, // Fallback if empty
+                      tags: [...new Set([...c.tags, ...(expanded.tags || [])])],
+                      relations: [...(c.relations || []), ...(expanded.relations || [])],
+                      lastUpdated: new Date().toISOString()
+                  };
+              }
+              return c;
+          });
+          const newState = { ...prev, codex: newCodex };
+          gameService.saveGame(newState); // Auto-save
+          return newState;
+      });
+  };
 
   const applyStateUpdate = (currentState: GameState, update: any): GameState => {
       const newState = { ...currentState };
@@ -227,6 +255,45 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
           };
       }
 
+      // CODEX UPDATE (Tier 3.5 + 4)
+      if (update.codex_update && Array.isArray(update.codex_update)) {
+          const newCodex = [...(newState.codex || [])];
+          update.codex_update.forEach((entry: Partial<CodexEntry>) => {
+              if (!entry.id || !entry.name) return;
+              
+              const existingIndex = newCodex.findIndex(c => c.id === entry.id);
+              const now = new Date().toISOString();
+
+              if (existingIndex >= 0) {
+                  // Update existing
+                  newCodex[existingIndex] = {
+                      ...newCodex[existingIndex],
+                      ...entry,
+                      description: entry.description 
+                          ? newCodex[existingIndex].description + "\n\n" + entry.description // Append instead of overwrite for Dynamic Extraction
+                          : newCodex[existingIndex].description,
+                      tags: [...new Set([...newCodex[existingIndex].tags, ...(entry.tags || [])])],
+                      relations: [...(newCodex[existingIndex].relations || []), ...(entry.relations || [])],
+                      lastUpdated: now,
+                      isNew: true
+                  };
+              } else {
+                  // Add new
+                  newCodex.push({
+                      id: entry.id,
+                      name: entry.name,
+                      type: (entry.type as any) || 'Concept',
+                      tags: entry.tags || [],
+                      description: entry.description || '',
+                      relations: entry.relations || [],
+                      lastUpdated: now,
+                      isNew: true
+                  });
+              }
+          });
+          newState.codex = newCodex;
+      }
+
       newState.worldConfig.character = character;
       return newState;
   };
@@ -291,6 +358,13 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
           setGameState(u); gameService.saveGame(u); setIsTempRulesModalOpen(false);
       }} initialRules={gameState.worldConfig.temporaryRules} />
       
+      <CodexModal 
+        isOpen={isCodexOpen} 
+        onClose={() => setIsCodexOpen(false)} 
+        entries={gameState.codex || []} 
+        onExpandEntry={handleExpandCodexEntry}
+      />
+
       {showExitConfirm && (
         <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-[100] p-4">
             <div className="glass-panel p-6 rounded-3xl max-w-sm w-full border-red-500/20 shadow-2xl">
@@ -358,6 +432,17 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
                     </div>
                 </div>
 
+                {/* Codex Button (New) */}
+                <button onClick={() => setIsCodexOpen(true)} className="w-full glass-strong bg-indigo-900/20 hover:bg-indigo-900/40 p-4 rounded-2xl border border-indigo-500/20 flex items-center gap-3 transition-all group">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center text-indigo-400 group-hover:scale-110 transition-transform">
+                        <Icon name="book" className="w-5 h-5"/>
+                    </div>
+                    <div className="text-left">
+                        <div className="text-sm font-bold text-indigo-200">Codex / Wiki</div>
+                        <div className="text-[10px] text-slate-500">Hồ sơ thế giới ({gameState.codex?.length || 0})</div>
+                    </div>
+                </button>
+
                 {/* Quest Log */}
                 <div className="glass-strong bg-amber-900/10 p-4 rounded-2xl border border-amber-500/20">
                     <div className="text-xs font-bold text-amber-500 uppercase mb-3 flex items-center gap-2">
@@ -400,6 +485,7 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
             
             {/* Mobile Header Buttons (Top Right/Left) */}
             <div className="lg:hidden absolute top-4 right-4 z-40 flex gap-2">
+                <button onClick={() => setIsCodexOpen(true)} className="p-2 glass-panel rounded-full text-indigo-400"><Icon name="book" className="w-5 h-5"/></button>
                 <button onClick={() => setShowExitConfirm(true)} className="p-2 glass-panel rounded-full text-red-400"><Icon name="xCircle" className="w-5 h-5"/></button>
             </div>
             <div className="lg:hidden absolute top-4 left-4 z-40">
@@ -503,6 +589,7 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
                             {lastStateUpdate.inventory_add && lastStateUpdate.inventory_add.map((i:any) => <li key={i}>🎒 + {i}</li>)}
                             {lastStateUpdate.level_up && <li className="text-yellow-300 font-bold">✨ LÊN CẤP!</li>}
                             {lastStateUpdate.time_passed && <li>⏳ +{lastStateUpdate.time_passed} phút</li>}
+                            {lastStateUpdate.codex_update && <li>📘 Codex: +{lastStateUpdate.codex_update.length} entry</li>}
                         </ul>
                     </div>
                 </div>
