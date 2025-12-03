@@ -1,6 +1,7 @@
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { GameTurn, GameState, TemporaryRule, CharacterConfig, WorldTime, Quest, WeatherType, CodexEntry } from '../types';
+
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { GameTurn, GameState, TemporaryRule, CodexEntry, WeatherType, CustomStat, CombatEntity, MerchantData } from '../types';
 import * as aiService from '../services/aiService';
 import * as gameService from '../services/gameService';
 import { WEATHER_TRANSLATIONS } from '../constants';
@@ -8,8 +9,152 @@ import Button from './common/Button';
 import Icon from './common/Icon';
 import TemporaryRulesModal from './TemporaryRulesModal';
 import CodexModal from './CodexModal';
+import { useStore } from '../store/useStore';
 
-// --- Helper to clean AI text ---
+// --- SUB-COMPONENTS FOR HUD ---
+
+const HUDButton: React.FC<{ icon: any; label?: string; onClick: () => void; active?: boolean }> = ({ icon, label, onClick, active }) => (
+    <button 
+        onClick={onClick} 
+        className={`group relative flex items-center gap-2 p-3 rounded-xl transition-all duration-300 ${active ? 'bg-fuchsia-500 text-white shadow-lg shadow-fuchsia-500/40' : 'bg-slate-900/60 text-slate-400 hover:bg-slate-800 hover:text-white border border-white/5'}`}
+    >
+        <Icon name={icon} className="w-5 h-5" />
+        {label && <span className="text-xs font-bold hidden md:inline">{label}</span>}
+    </button>
+);
+
+const CharacterModal: React.FC<{ isOpen: boolean; onClose: () => void; gameState: GameState }> = ({ isOpen, onClose, gameState }) => {
+    if (!isOpen) return null;
+    const { character, progressionSystem } = gameState.worldConfig;
+    const currentRank = progressionSystem?.ranks[character.currentRankIndex || 0];
+    const nextRank = progressionSystem?.ranks[(character.currentRankIndex || 0) + 1];
+
+    return (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md" onClick={onClose}>
+            <div className="glass-panel w-full max-w-md p-6 rounded-3xl animate-fade-in-up border border-fuchsia-500/20 relative" onClick={e => e.stopPropagation()}>
+                <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-white/5 rounded-full hover:bg-white/10"><Icon name="xCircle" className="w-5 h-5"/></button>
+                
+                <div className="flex items-center gap-4 mb-6">
+                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-fuchsia-500 to-purple-600 flex items-center justify-center text-white shadow-lg shadow-fuchsia-500/20">
+                        <Icon name="user" className="w-8 h-8"/>
+                    </div>
+                    <div>
+                        <h2 className="text-2xl font-black text-white">{character.name}</h2>
+                        <div className="flex gap-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                            {currentRank && <span className="text-fuchsia-400">{currentRank.name}</span>}
+                            <span>•</span>
+                            <span>{character.gender}</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Stats Grid */}
+                <div className="space-y-4 mb-6">
+                     {/* HP */}
+                     <div>
+                        <div className="flex justify-between text-xs font-bold text-slate-400 mb-1">
+                            <span>HP</span>
+                            <span>{character.hp}/{character.maxHp}</span>
+                        </div>
+                        <div className="w-full bg-slate-900 rounded-full h-2 overflow-hidden border border-white/5">
+                            <div className="bg-red-500 h-full transition-all" style={{width: `${(character.hp / character.maxHp) * 100}%`}}></div>
+                        </div>
+                    </div>
+
+                    {/* Custom Stats */}
+                    {character.customStats?.map(stat => (
+                         <div key={stat.id}>
+                            <div className="flex justify-between text-xs font-bold text-slate-400 mb-1">
+                                <span>{stat.name}</span>
+                                <span>{stat.value}/{stat.max}</span>
+                            </div>
+                            <div className="w-full bg-slate-900 rounded-full h-2 overflow-hidden border border-white/5">
+                                <div className={`h-full transition-all bg-${stat.color}-500`} style={{width: `${(stat.value / stat.max) * 100}%`, backgroundColor: stat.color === 'blue' ? '#3b82f6' : stat.color === 'purple' ? '#a855f7' : stat.color === 'yellow' ? '#eab308' : stat.color === 'red' ? '#ef4444' : stat.color === 'green' ? '#10b981' : '#d946ef' }}></div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Progression System Display */}
+                {progressionSystem && progressionSystem.enabled && currentRank && (
+                    <div className="mb-6 p-4 rounded-xl bg-slate-900/50 border border-white/5">
+                        <div className="flex items-center gap-2 text-xs font-bold text-fuchsia-400 uppercase tracking-widest mb-3">
+                            <Icon name="arrowUp" className="w-4 h-4"/> {progressionSystem.name}
+                        </div>
+                        <div className="mb-3">
+                            <div className="text-lg font-bold text-white">{currentRank.name}</div>
+                            <div className="text-xs text-slate-400 italic">{currentRank.description}</div>
+                        </div>
+                        
+                        {nextRank ? (
+                            <div className="bg-black/30 p-2 rounded-lg">
+                                <div className="text-[10px] text-slate-500 uppercase font-bold mb-1">Điều kiện lên cấp {nextRank.name}</div>
+                                {nextRank.requirements.map((req, i) => {
+                                    const stat = character.customStats.find(s => s.id === req.statId);
+                                    if (!stat) return null;
+                                    const isMet = stat.value >= req.value;
+                                    return (
+                                        <div key={i} className="flex justify-between text-xs">
+                                            <span className="text-slate-300">{stat.name} ({stat.value}/{req.value})</span>
+                                            {isMet ? <Icon name="checkCircle" className="w-4 h-4 text-emerald-500"/> : <span className="text-slate-600">Chưa đạt</span>}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="text-center text-xs text-fuchsia-300 font-bold mt-2">Đã đạt cảnh giới tối cao</div>
+                        )}
+                    </div>
+                )}
+
+                <div className="flex justify-between items-center p-4 bg-slate-900/50 rounded-xl border border-white/5">
+                    <span className="text-sm font-bold text-slate-300">Tài chính</span>
+                    <span className="text-amber-400 font-mono font-bold flex items-center gap-2">
+                        <Icon name="search" className="w-4 h-4"/> {character.gold} Gold
+                    </span>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const InventoryModal: React.FC<{ isOpen: boolean; onClose: () => void; gameState: GameState }> = ({ isOpen, onClose, gameState }) => {
+    if (!isOpen) return null;
+    const { character } = gameState.worldConfig;
+
+    return (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md" onClick={onClose}>
+            <div className="glass-panel w-full max-w-md p-6 rounded-3xl animate-fade-in-up border border-emerald-500/20 relative" onClick={e => e.stopPropagation()}>
+                 <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-white/5 rounded-full hover:bg-white/10"><Icon name="xCircle" className="w-5 h-5"/></button>
+                 
+                 <div className="flex items-center gap-3 mb-6">
+                     <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                         <Icon name="database" className="w-5 h-5"/>
+                     </div>
+                     <h2 className="text-xl font-bold text-white">Túi Đồ</h2>
+                 </div>
+
+                 <div className="max-h-[60vh] overflow-y-auto custom-scrollbar">
+                     {character.inventory.length > 0 ? (
+                         <div className="grid grid-cols-1 gap-2">
+                             {character.inventory.map((item, idx) => (
+                                 <div key={idx} className="p-3 bg-slate-900/50 rounded-xl border border-white/5 flex items-center gap-3">
+                                     <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-slate-500">
+                                         <Icon name="tag" className="w-4 h-4"/>
+                                     </div>
+                                     <span className="text-sm text-slate-200 font-medium">{item}</span>
+                                 </div>
+                             ))}
+                         </div>
+                     ) : (
+                         <div className="text-center py-10 text-slate-500 italic">Túi đồ trống rỗng.</div>
+                     )}
+                 </div>
+            </div>
+        </div>
+    );
+};
+
 const cleanAndFormatContent = (content: string) => {
     let cleaned = content.replace(/<state>[\s\S]*?<\/state>/gi, '');
     cleaned = cleaned.replace(/<thought>[\s\S]*?<\/thought>/gi, '');
@@ -18,10 +163,10 @@ const cleanAndFormatContent = (content: string) => {
 
 const getTextSizeClass = (size: 'small' | 'medium' | 'large' = 'medium') => {
     switch(size) {
-        case 'small': return 'text-sm md:text-base leading-relaxed'; // Smaller
-        case 'large': return 'text-xl md:text-3xl leading-loose'; // Much Larger
+        case 'small': return 'text-sm md:text-base leading-relaxed'; 
+        case 'large': return 'text-xl md:text-2xl leading-loose'; 
         case 'medium': 
-        default: return 'text-base md:text-xl leading-relaxed'; // Standard
+        default: return 'text-base md:text-lg leading-relaxed';
     }
 };
 
@@ -34,7 +179,6 @@ const FormattedNarration: React.FC<{ content: string; textSize?: 'small' | 'medi
         <div className="prose prose-invert max-w-none">
             {paragraphs.map((para, index) => {
                 const parts = para.split(/(\*\*.*?\*\*|<exp>.*?<\/exp>)/g).filter(Boolean);
-                
                 return (
                     <p key={index} className={`mb-6 text-slate-200 font-serif tracking-wide text-justify ${sizeClass}`}>
                         {parts.map((part, i) => {
@@ -54,38 +198,41 @@ const FormattedNarration: React.FC<{ content: string; textSize?: 'small' | 'medi
 });
 
 interface GameplayScreenProps {
-  initialGameState: GameState;
   onBack: () => void;
-  textSize?: 'small' | 'medium' | 'large';
-  isDesktopMode?: boolean; // Force desktop layout even on small screens
 }
 
-const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBack, textSize = 'medium', isDesktopMode = false }) => {
-  const [gameState, setGameState] = useState<GameState>(initialGameState);
+const GameplayScreen: React.FC<GameplayScreenProps> = ({ onBack }) => {
+  const { gameState, setGameState, appSettings, applyGameStateUpdate } = useStore();
+  
+  const textSize = appSettings.uiSettings.textSize;
+
+  if (!gameState) return null;
+
   const [playerInput, setPlayerInput] = useState('');
-  const [isLoading, setIsLoading] = useState(initialGameState.history.length === 0);
+  const [isLoading, setIsLoading] = useState(gameState.history.length === 0);
   const [error, setError] = useState<string | null>(null);
+  
+  // Modals State
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [isTempRulesModalOpen, setIsTempRulesModalOpen] = useState(false);
   const [isCodexOpen, setIsCodexOpen] = useState(false);
-  const [lastStateUpdate, setLastStateUpdate] = useState<any>(null);
+  const [isCharacterModalOpen, setIsCharacterModalOpen] = useState(false);
+  const [isInventoryModalOpen, setIsInventoryModalOpen] = useState(false);
   
-  // Pagination State
+  const [lastStateUpdate, setLastStateUpdate] = useState<any>(null);
+  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
+  const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
+
+  
   const historyPairs = useMemo(() => {
       const pairs: GameTurn[][] = [];
       const h = gameState.history;
       if (h.length === 0) return [];
-      
-      if (h[0].type === 'narration') {
-          pairs.push([h[0]]);
-      }
-
+      if (h[0].type === 'narration') pairs.push([h[0]]);
       for (let i = 1; i < h.length; i++) {
           if (h[i].type === 'action') {
               const pair = [h[i]];
-              if (h[i+1] && h[i+1].type === 'narration') {
-                  pair.push(h[i+1]);
-              }
+              if (h[i+1] && h[i+1].type === 'narration') pair.push(h[i+1]);
               pairs.push(pair);
           }
       }
@@ -93,12 +240,7 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
   }, [gameState.history]);
 
   const [currentPage, setCurrentPage] = useState<number>(historyPairs.length > 0 ? historyPairs.length - 1 : 0);
-
-  useEffect(() => {
-      if (historyPairs.length > 0) {
-          setCurrentPage(historyPairs.length - 1);
-      }
-  }, [historyPairs.length]);
+  useEffect(() => { if (historyPairs.length > 0) setCurrentPage(historyPairs.length - 1); }, [historyPairs.length]);
 
   const isInitialLoading = isLoading && gameState.history.length === 0;
   
@@ -107,159 +249,51 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
     setIsLoading(true); setError(null);
     try {
       const startingNarration = await aiService.startGame(gameState.worldConfig);
-      const updated = { ...gameState, history: [{ type: 'narration', content: startingNarration } as GameTurn] };
+      // Try to parse suggestions from initial load too
+      const stateMatch = startingNarration.match(/<state>([\s\S]*?)<\/state>/);
+      let suggestions: string[] = [];
+      let content = startingNarration;
+
+      if (stateMatch) {
+          try {
+             // We reuse the parsing logic implicitly, but let's do a quick extract here if needed or let getNextTurn handle it.
+             // But start game is direct.
+             const json = JSON.parse(stateMatch[1]);
+             if (json.suggestions) suggestions = json.suggestions;
+             content = startingNarration.replace(/<state>[\s\S]*?<\/state>/, '').trim();
+          } catch(e) {}
+      }
+      
+      const updated = { ...gameState, history: [{ type: 'narration', content: content } as GameTurn] };
       setGameState(updated);
       gameService.saveGame(updated);
+      if (suggestions.length > 0) { setAiSuggestions(suggestions); setIsSuggestionsOpen(true); }
+
     } catch (e) { setError(e instanceof Error ? e.message : 'Lỗi khởi tạo.'); } 
     finally { setIsLoading(false); }
-  }, [gameState]);
+  }, [gameState, setGameState]);
 
   useEffect(() => { startGame(); }, [startGame]);
   
   const handleExpandCodexEntry = async (entry: CodexEntry) => {
       const expanded = await aiService.expandCodexEntry(gameState.worldConfig, entry);
-      setGameState(prev => {
-          const newCodex = prev.codex.map(c => {
-              if (c.id === entry.id) {
-                  return {
-                      ...c,
-                      ...expanded,
-                      description: expanded.description || c.description,
-                      tags: [...new Set([...c.tags, ...(expanded.tags || [])])],
-                      relations: [...(c.relations || []), ...(expanded.relations || [])],
-                      lastUpdated: new Date().toISOString()
-                  };
-              }
-              return c;
-          });
-          const newState = { ...prev, codex: newCodex };
-          gameService.saveGame(newState);
-          return newState;
-      });
+      applyGameStateUpdate({ codex_update: [{ id: entry.id, ...expanded }] });
   };
 
-  const applyStateUpdate = (currentState: GameState, update: any): GameState => {
-      const newState = { ...currentState };
-      let character = { ...newState.worldConfig.character };
-      
-      if (update.inventory_add && Array.isArray(update.inventory_add)) {
-          character.inventory = [...character.inventory, ...update.inventory_add];
-      }
-      if (update.inventory_remove && Array.isArray(update.inventory_remove)) {
-          character.inventory = character.inventory.filter(item => !update.inventory_remove.includes(item));
-      }
-      if (update.hp_change) {
-          character.hp = Math.min(character.maxHp, Math.max(0, character.hp + update.hp_change));
-      }
-      if (update.gold_change) {
-          character.gold = Math.max(0, character.gold + update.gold_change);
-      }
-      if (update.level_up) {
-          character.level += 1;
-          character.maxHp += 10;
-          character.hp = character.maxHp; 
-      }
-      if (update.status_add && Array.isArray(update.status_add)) {
-           const newEffects = update.status_add.filter((e: string) => !character.statusEffects.includes(e));
-           character.statusEffects = [...character.statusEffects, ...newEffects];
-      }
-      if (update.status_remove && Array.isArray(update.status_remove)) {
-           character.statusEffects = character.statusEffects.filter(e => !update.status_remove.includes(e));
-      }
-      if (update.time_passed) {
-          let minutesToAdd = update.time_passed;
-          let current = { ...newState.worldTime };
-          current.minute += minutesToAdd;
-          while (current.minute >= 60) {
-              current.minute -= 60;
-              current.hour += 1;
-          }
-          while (current.hour >= 24) {
-              current.hour -= 24;
-              current.day += 1;
-          }
-          while (current.day > 30) {
-              current.day -= 30;
-              current.month += 1;
-          }
-          while (current.month > 12) {
-              current.month -= 12;
-              current.year += 1;
-          }
-          newState.worldTime = current;
-      }
-      if (update.weather_update) {
-          newState.weather = update.weather_update as WeatherType;
-      }
-      if (update.quest_update && Array.isArray(update.quest_update)) {
-          update.quest_update.forEach((qUpdate: any) => {
-              if (qUpdate.action === 'add') {
-                  if (!newState.questLog.find(q => q.id === qUpdate.id)) {
-                      newState.questLog.push({
-                          id: qUpdate.id,
-                          title: qUpdate.title,
-                          description: qUpdate.description,
-                          status: qUpdate.status || 'active',
-                          type: qUpdate.type || 'main'
-                      });
-                  }
-              } else if (qUpdate.action === 'update') {
-                  newState.questLog = newState.questLog.map(q => 
-                      q.id === qUpdate.id ? { ...q, status: qUpdate.status } : q
-                  );
-              }
-          });
-      }
-      if (update.player_behavior_tag) {
-          newState.playerAnalysis = {
-              ...newState.playerAnalysis,
-              behaviorTags: [...newState.playerAnalysis.behaviorTags, update.player_behavior_tag]
-          };
-      }
-      if (update.codex_update && Array.isArray(update.codex_update)) {
-          const newCodex = [...(newState.codex || [])];
-          update.codex_update.forEach((entry: Partial<CodexEntry>) => {
-              if (!entry.id || !entry.name) return;
-              const existingIndex = newCodex.findIndex(c => c.id === entry.id);
-              const now = new Date().toISOString();
-              if (existingIndex >= 0) {
-                  newCodex[existingIndex] = {
-                      ...newCodex[existingIndex],
-                      ...entry,
-                      description: entry.description 
-                          ? newCodex[existingIndex].description + "\n\n" + entry.description 
-                          : newCodex[existingIndex].description,
-                      tags: [...new Set([...newCodex[existingIndex].tags, ...(entry.tags || [])])],
-                      relations: [...(newCodex[existingIndex].relations || []), ...(entry.relations || [])],
-                      lastUpdated: now,
-                      isNew: true
-                  };
-              } else {
-                  newCodex.push({
-                      id: entry.id,
-                      name: entry.name,
-                      type: (entry.type as any) || 'Concept',
-                      tags: entry.tags || [],
-                      description: entry.description || '',
-                      relations: entry.relations || [],
-                      lastUpdated: now,
-                      isNew: true
-                  });
-              }
-          });
-          newState.codex = newCodex;
-      }
-      newState.worldConfig.character = character;
-      return newState;
-  };
-
-  const handleSendAction = async () => {
-    if (!playerInput.trim() || isLoading) return;
-    const newAction: GameTurn = { type: 'action', content: playerInput.trim() };
+  const handleSendAction = async (input?: string) => {
+    const textToSend = input || playerInput;
+    if (!textToSend.trim() || isLoading) return;
+    
+    const newAction: GameTurn = { type: 'action', content: textToSend.trim() };
     const tempHistory = [...gameState.history, newAction];
-    setGameState(prev => ({ ...prev, history: tempHistory }));
+    
+    // Optimistic Update
+    setGameState({ ...gameState, history: tempHistory });
     setPlayerInput('');
     setIsLoading(true); setError(null);
+    setAiSuggestions([]); // Clear old suggestions
+    setIsSuggestionsOpen(false);
+    
     try {
       const { narration, newSummary, truncatedHistory, stateUpdate } = await aiService.getNextTurn(gameState.worldConfig, tempHistory, gameState.summary, gameState);
       let finalHistory: GameTurn[];
@@ -268,16 +302,24 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
       } else {
           finalHistory = [...tempHistory, { type: 'narration', content: narration }];
       }
-      let nextGameState = { ...gameState };
-      nextGameState.history = finalHistory;
+      
+      let nextGameState = { ...gameState, history: finalHistory };
       if (newSummary) nextGameState.summary = newSummary;
+      
+      setGameState(nextGameState); // Set state first
+      
       if (stateUpdate) {
           setLastStateUpdate(stateUpdate);
-          nextGameState = applyStateUpdate(nextGameState, stateUpdate);
+          applyGameStateUpdate(stateUpdate); // Use Store Action to handle updates
           setTimeout(() => setLastStateUpdate(null), 5000);
+          
+          if (stateUpdate.suggestions && Array.isArray(stateUpdate.suggestions)) {
+              setAiSuggestions(stateUpdate.suggestions);
+              setIsSuggestionsOpen(true);
+          }
+      } else {
+          gameService.saveGame(nextGameState); // Save if no state update triggered auto-save
       }
-      setGameState(nextGameState);
-      gameService.saveGame(nextGameState);
     } catch (e) { setError(e instanceof Error ? e.message : 'Lỗi AI.'); } 
     finally { setIsLoading(false); }
   };
@@ -296,13 +338,11 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
   
   const currentPair = historyPairs[currentPage] || [];
   
-  // Use isDesktopMode to force sidebar visibility (override tailwind 'hidden lg:flex' if true)
-  const sidebarClasses = isDesktopMode 
-      ? "flex flex-col w-72 glass-panel border-r border-white/5 p-6 z-20 h-full backdrop-blur-2xl"
-      : "hidden lg:flex flex-col w-72 glass-panel border-r border-white/5 p-6 z-20 h-full backdrop-blur-2xl";
-
   return (
     <>
+      {/* Modals */}
+      <CharacterModal isOpen={isCharacterModalOpen} onClose={() => setIsCharacterModalOpen(false)} gameState={gameState} />
+      <InventoryModal isOpen={isInventoryModalOpen} onClose={() => setIsInventoryModalOpen(false)} gameState={gameState} />
       <TemporaryRulesModal isOpen={isTempRulesModalOpen} onClose={() => setIsTempRulesModalOpen(false)} onSave={(r) => {
           const u = { ...gameState, worldConfig: { ...gameState.worldConfig, temporaryRules: r } };
           setGameState(u); gameService.saveGame(u); setIsTempRulesModalOpen(false);
@@ -323,12 +363,18 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
         </div>
       )}
 
-      {/* Changed h-screen to h-full for scaling compatibility */}
       <div className="flex h-full w-full overflow-hidden bg-slate-950 relative">
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-slate-950/50 pointer-events-none z-10"></div>
 
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 animate-fade-in-up">
-            <div className="glass-strong rounded-full px-5 py-2 flex items-center gap-4 border-white/10 shadow-lg bg-slate-900/60 backdrop-blur-xl">
+        {/* TOP HUD BAR */}
+        <div className="absolute top-0 left-0 right-0 z-50 p-4 flex justify-between items-start pointer-events-none">
+            {/* Left: Genre Title */}
+            <div className="pointer-events-auto glass-panel px-4 py-2 rounded-xl border border-white/5 bg-slate-900/80 backdrop-blur-md shadow-lg hidden md:block">
+                <h1 className="font-black text-sm text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-400 to-indigo-400 uppercase tracking-widest">{gameState.worldConfig.storyContext.genre}</h1>
+            </div>
+
+            {/* Center: Weather & Time Pill (Existing) */}
+            <div className="glass-strong rounded-full px-5 py-2 flex items-center gap-4 border-white/10 shadow-lg bg-slate-900/80 backdrop-blur-xl pointer-events-auto">
                  <div className="flex items-center gap-2 border-r border-white/10 pr-4">
                      <Icon name={getWeatherIcon(gameState.weather) as any} className="w-5 h-5 text-amber-300 drop-shadow-md" />
                      <span className="text-xs font-bold text-slate-200 hidden sm:inline">{WEATHER_TRANSLATIONS[gameState.weather]}</span>
@@ -343,134 +389,98 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
                      </span>
                  </div>
             </div>
-        </div>
 
-        {/* SIDEBAR */}
-        <div className={sidebarClasses}>
-            <div className="mb-6 mt-12">
-                <h1 className="font-black text-xl text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-400 to-indigo-400 truncate">{gameState.worldConfig.storyContext.genre}</h1>
-            </div>
-            
-            <div className="space-y-4 flex-1 overflow-y-auto pr-1 custom-scrollbar">
-                <div className="glass-strong bg-slate-900/50 p-4 rounded-2xl border border-white/5 shadow-inner">
-                    <div className="text-xs font-bold text-slate-500 uppercase mb-3 flex items-center gap-2">
-                        <Icon name="user" className="w-3 h-3"/> Nhân Vật
-                    </div>
-                    <div className="font-bold text-lg text-white mb-1 flex justify-between items-center">
-                        <span className="truncate">{gameState.worldConfig.character.name}</span>
-                        <span className="text-[10px] bg-fuchsia-500/20 text-fuchsia-300 px-2 py-0.5 rounded-full border border-fuchsia-500/30">Lv.{gameState.worldConfig.character.level || 1}</span>
-                    </div>
-                    <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden mb-2 mt-2">
-                        <div className="bg-red-500 h-full transition-all duration-500" style={{width: `${(gameState.worldConfig.character.hp / gameState.worldConfig.character.maxHp) * 100}%`}}></div>
-                    </div>
-                    <div className="flex justify-between text-[10px] text-slate-400 font-mono">
-                        <span>HP: {gameState.worldConfig.character.hp}/{gameState.worldConfig.character.maxHp}</span>
-                        <span className="text-yellow-500">Gold: {gameState.worldConfig.character.gold}</span>
-                    </div>
-                </div>
-
-                <button onClick={() => setIsCodexOpen(true)} className="w-full glass-strong bg-indigo-900/20 hover:bg-indigo-900/40 p-4 rounded-2xl border border-indigo-500/20 flex items-center gap-3 transition-all group">
-                    <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center text-indigo-400 group-hover:scale-110 transition-transform">
-                        <Icon name="book" className="w-5 h-5"/>
-                    </div>
-                    <div className="text-left">
-                        <div className="text-sm font-bold text-indigo-200">Codex / Wiki</div>
-                        <div className="text-[10px] text-slate-500">Hồ sơ thế giới ({gameState.codex?.length || 0})</div>
-                    </div>
-                </button>
-
-                <div className="glass-strong bg-amber-900/10 p-4 rounded-2xl border border-amber-500/20">
-                    <div className="text-xs font-bold text-amber-500 uppercase mb-3 flex items-center gap-2">
-                        <Icon name="quest" className="w-3 h-3"/> Nhiệm Vụ
-                    </div>
-                    {gameState.questLog.length > 0 ? (
-                        <ul className="space-y-3">
-                            {gameState.questLog.filter(q => q.status === 'active').map((quest) => (
-                                <li key={quest.id} className="text-xs text-slate-300 border-l-2 border-amber-500/50 pl-2">
-                                    <div className="font-bold text-amber-100">{quest.title}</div>
-                                </li>
-                            ))}
-                             {gameState.questLog.every(q => q.status !== 'active') && <li className="text-[10px] italic text-slate-500">Không có nhiệm vụ active.</li>}
-                        </ul>
-                    ) : (
-                         <div className="text-[10px] italic text-slate-500 text-center">Chưa có nhiệm vụ nào.</div>
-                    )}
-                </div>
-
-                <div className="glass-strong bg-slate-900/50 p-4 rounded-2xl border border-white/5">
-                    <div className="text-xs font-bold text-slate-500 uppercase mb-3 flex items-center gap-2">
-                        <Icon name="database" className="w-3 h-3"/> Hành Trang
-                    </div>
-                    <ul className="text-xs text-slate-300 space-y-1">
-                        {gameState.worldConfig.character.inventory.map((item, i) => <li key={i}>• {item}</li>)}
-                        {gameState.worldConfig.character.inventory.length === 0 && <li className="italic text-slate-600">Trống</li>}
-                    </ul>
-                </div>
-            </div>
-
-            <div className="mt-auto pt-4 border-t border-white/5 flex gap-2">
-                 <Button onClick={() => gameService.saveGame(gameState)} variant="ghost" className="!p-2 flex-1 border border-white/5 hover:bg-white/5"><Icon name="save" className="w-5 h-5"/></Button>
-                 <Button onClick={() => setShowExitConfirm(true)} variant="ghost" className="!p-2 flex-1 border border-white/5 hover:bg-red-500/10 hover:text-red-400"><Icon name="back" className="w-5 h-5"/></Button>
+            {/* Right: Action Buttons */}
+            <div className="flex gap-2 pointer-events-auto">
+                <HUDButton icon="user" onClick={() => setIsCharacterModalOpen(true)} />
+                <HUDButton icon="database" onClick={() => setIsInventoryModalOpen(true)} />
+                <HUDButton icon="book" onClick={() => setIsCodexOpen(true)} />
+                <HUDButton icon="rules" onClick={() => setIsTempRulesModalOpen(true)} />
+                <HUDButton icon="back" onClick={() => setShowExitConfirm(true)} />
             </div>
         </div>
 
-        {/* MAIN AREA */}
-        <div className="flex-1 flex flex-col relative h-full z-10 bg-slate-950/80">
+        {/* MAIN CONTENT AREA */}
+        <div className="flex-1 flex flex-col relative h-full z-10 bg-slate-950/80 w-full">
             
-            {/* Mobile Header Buttons (Top Right/Left) - HIDDEN IF DESKTOP MODE IS FORCED (because Sidebar has these) */}
-            {!isDesktopMode && (
-                <>
-                <div className="lg:hidden absolute top-4 right-4 z-40 flex gap-2">
-                    <button onClick={() => setIsCodexOpen(true)} className="p-2 glass-panel rounded-full text-indigo-400"><Icon name="book" className="w-5 h-5"/></button>
-                    <button onClick={() => setShowExitConfirm(true)} className="p-2 glass-panel rounded-full text-red-400"><Icon name="xCircle" className="w-5 h-5"/></button>
-                </div>
-                <div className="lg:hidden absolute top-4 left-4 z-40">
-                    <button onClick={() => setIsTempRulesModalOpen(true)} className="p-2 glass-panel rounded-full text-slate-400"><Icon name="rules" className="w-5 h-5"/></button>
-                </div>
-                </>
-            )}
-
-            <div className="flex justify-center items-center py-4 mt-16 lg:mt-16 z-30 pointer-events-none">
+            {/* Pagination */}
+            <div className="flex justify-center items-center py-4 mt-20 z-30 pointer-events-none">
                  <div className="glass-strong rounded-full px-2 py-1 flex items-center gap-4 pointer-events-auto shadow-lg">
-                      <button 
-                        onClick={() => setCurrentPage(p => Math.max(0, p - 1))} 
-                        disabled={currentPage === 0}
-                        className="p-2 hover:bg-white/10 rounded-full disabled:opacity-30 transition-colors"
-                      >
-                          <Icon name="back" className="w-4 h-4 text-slate-300"/>
-                      </button>
-                      <span className="text-xs font-mono font-bold text-slate-400 w-20 text-center">
-                          TRANG {currentPage + 1} / {historyPairs.length || 1}
-                      </span>
-                      <button 
-                        onClick={() => setCurrentPage(p => Math.min(historyPairs.length - 1, p + 1))} 
-                        disabled={currentPage === historyPairs.length - 1}
-                        className="p-2 hover:bg-white/10 rounded-full disabled:opacity-30 transition-colors"
-                      >
-                          <Icon name="play" className="w-4 h-4 text-slate-300"/>
-                      </button>
+                      <button onClick={() => setCurrentPage(p => Math.max(0, p - 1))} disabled={currentPage === 0} className="p-2 hover:bg-white/10 rounded-full disabled:opacity-30"><Icon name="back" className="w-4 h-4 text-slate-300"/></button>
+                      <span className="text-xs font-mono font-bold text-slate-400 w-20 text-center">TRANG {currentPage + 1} / {historyPairs.length || 1}</span>
+                      <button onClick={() => setCurrentPage(p => Math.min(historyPairs.length - 1, p + 1))} disabled={currentPage === historyPairs.length - 1} className="p-2 hover:bg-white/10 rounded-full disabled:opacity-30"><Icon name="play" className="w-4 h-4 text-slate-300"/></button>
                  </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-4 sm:px-12 md:px-24 pb-32 scroll-smooth custom-scrollbar">
+            {/* TEXT AREA with CONTEXTUAL OVERLAYS */}
+            <div className="flex-1 overflow-y-auto px-4 sm:px-8 md:px-12 pt-4 pb-48 scroll-smooth custom-scrollbar w-full max-w-5xl mx-auto">
+                
+                {/* COMBAT OVERLAY */}
+                {gameState.interfaceMode === 'combat' && gameState.activeEnemies.length > 0 && (
+                    <div className="mb-6 p-4 rounded-2xl bg-red-900/10 border border-red-500/20 animate-fade-in-up">
+                        <div className="text-xs font-bold text-red-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                             <Icon name="shieldCheck" className="w-4 h-4"/> COMBAT MODE
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {gameState.activeEnemies.map((enemy) => (
+                                <div key={enemy.id} className="glass-panel bg-slate-900/80 p-4 rounded-xl border-white/5 relative overflow-hidden">
+                                     <div className="relative z-10">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="font-bold text-white">{enemy.name}</span>
+                                            <span className="text-xs text-red-300 font-mono">{enemy.hp}/{enemy.maxHp} HP</span>
+                                        </div>
+                                        <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden mb-2">
+                                            <div className="bg-red-500 h-full transition-all duration-300" style={{width: `${(enemy.hp/enemy.maxHp)*100}%`}}></div>
+                                        </div>
+                                        {enemy.description && <p className="text-xs text-slate-400 italic">{enemy.description}</p>}
+                                     </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* MERCHANT OVERLAY */}
+                {gameState.interfaceMode === 'exchange' && gameState.activeMerchant && (
+                    <div className="mb-6 p-4 rounded-2xl bg-emerald-900/10 border border-emerald-500/20 animate-fade-in-up">
+                        <div className="text-xs font-bold text-emerald-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                             <Icon name="database" className="w-4 h-4"/> MERCHANT: {gameState.activeMerchant.name}
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            {gameState.activeMerchant.inventory.map((item) => (
+                                <div key={item.id} className="flex justify-between items-center p-3 glass-panel bg-slate-900/60 rounded-xl border-white/5">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400"><Icon name="tag" className="w-4 h-4"/></div>
+                                        <div>
+                                            <div className="text-sm font-bold text-slate-200">{item.name}</div>
+                                            <div className="text-xs text-yellow-500">{item.cost} Gold</div>
+                                        </div>
+                                    </div>
+                                    <Button onClick={() => setPlayerInput(`Mua ${item.name}`)} variant="secondary" fullWidth={false} className="!py-1 !px-3 !text-xs">Mua</Button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 {isInitialLoading ? (
-                    <div className="h-full flex flex-col items-center justify-center">
+                    <div className="h-full flex flex-col items-center justify-center min-h-[50vh]">
                         <div className="w-16 h-16 rounded-full border-2 border-t-fuchsia-500 animate-spin mb-4"></div>
                         <p className="text-fuchsia-300 font-serif italic tracking-widest animate-pulse">Đang kiến tạo thế giới...</p>
                     </div>
                 ) : (
-                    <div className="max-w-3xl mx-auto animate-fade-in-up py-4">
+                    <div className="animate-fade-in-up">
                         {currentPair.map((turn, idx) => (
                             <div key={idx} className="mb-8">
                                 {turn.type === 'action' ? (
                                     <div className="flex justify-end mb-6">
-                                         <div className="glass-panel border-fuchsia-500/30 bg-fuchsia-900/10 rounded-2xl rounded-tr-none px-6 py-4 shadow-lg backdrop-blur-sm max-w-[80%]">
+                                         <div className="glass-panel border-fuchsia-500/30 bg-fuchsia-900/10 rounded-2xl rounded-tr-none px-6 py-4 shadow-lg backdrop-blur-sm max-w-[90%] md:max-w-[80%]">
                                              <p className="text-fuchsia-100 font-serif italic text-lg leading-relaxed">"{turn.content}"</p>
                                          </div>
                                     </div>
                                 ) : (
                                     <div className="relative">
-                                        <div className="absolute -left-6 top-1 text-fuchsia-500/30 font-serif text-4xl leading-none">“</div>
+                                        <div className="absolute -left-4 md:-left-8 top-1 text-fuchsia-500/30 font-serif text-4xl leading-none">“</div>
                                         <FormattedNarration content={turn.content} textSize={textSize} />
                                     </div>
                                 )}
@@ -480,15 +490,42 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
                 )}
                 
                 {isLoading && !isInitialLoading && (
-                    <div className="max-w-3xl mx-auto mt-4 flex items-center gap-2 text-fuchsia-400 text-sm font-mono animate-pulse">
+                    <div className="mt-4 flex items-center gap-2 text-fuchsia-400 text-sm font-mono animate-pulse">
                         <Icon name="magic" className="w-4 h-4 animate-spin"/>
                         <span>AI đang viết trang tiếp theo...</span>
                     </div>
                 )}
             </div>
 
-            <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-8 bg-gradient-to-t from-slate-950 via-slate-950/90 to-transparent z-40">
-                <div className="max-w-3xl mx-auto glass-strong rounded-[2rem] p-2 pl-6 flex items-end gap-2 shadow-[0_0_60px_rgba(0,0,0,0.6)] border-t border-white/10 ring-1 ring-white/5 transition-all focus-within:ring-fuchsia-500/50 focus-within:border-fuchsia-500/50 bg-slate-900/80 backdrop-blur-xl">
+            {/* Input Area */}
+            <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-6 md:p-8 bg-gradient-to-t from-slate-950 via-slate-950/95 to-transparent z-40">
+                {/* SUGGESTIONS BAR (NEW) */}
+                {aiSuggestions.length > 0 && !isLoading && (
+                    <div className="max-w-5xl mx-auto mb-2 flex flex-col items-end">
+                         <button 
+                            onClick={() => setIsSuggestionsOpen(!isSuggestionsOpen)} 
+                            className="bg-slate-900/80 backdrop-blur-md border border-white/10 rounded-full px-3 py-1 flex items-center gap-2 text-xs font-bold text-fuchsia-400 mb-2 hover:bg-white/10 transition-colors shadow-lg"
+                         >
+                             <Icon name="magic" className="w-3 h-3"/>
+                             <span>Gợi ý {isSuggestionsOpen ? '▼' : '▲'}</span>
+                         </button>
+                         {isSuggestionsOpen && (
+                             <div className="flex gap-2 overflow-x-auto custom-scrollbar w-full pb-2 animate-fade-in-up">
+                                 {aiSuggestions.map((suggestion, idx) => (
+                                     <button
+                                         key={idx}
+                                         onClick={() => handleSendAction(suggestion)}
+                                         className="flex-shrink-0 bg-slate-900/60 backdrop-blur-sm border border-fuchsia-500/20 hover:border-fuchsia-500/50 hover:bg-fuchsia-900/20 text-slate-300 hover:text-white px-4 py-2 rounded-xl text-xs md:text-sm transition-all shadow-md whitespace-nowrap"
+                                     >
+                                         {suggestion}
+                                     </button>
+                                 ))}
+                             </div>
+                         )}
+                    </div>
+                )}
+
+                <div className="max-w-5xl mx-auto glass-strong rounded-[2rem] p-2 pl-4 md:pl-6 flex items-end gap-2 shadow-[0_0_60px_rgba(0,0,0,0.6)] border-t border-white/10 ring-1 ring-white/5 transition-all focus-within:ring-fuchsia-500/50 focus-within:border-fuchsia-500/50 bg-slate-900/90 backdrop-blur-xl">
                     <textarea
                         value={playerInput}
                         onChange={(e) => setPlayerInput(e.target.value)}
@@ -496,16 +533,16 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
                         placeholder="Hành động tiếp theo của bạn..."
                         disabled={isLoading}
                         rows={1}
-                        className="flex-1 bg-transparent border-none focus:ring-0 text-slate-100 placeholder:text-slate-500 resize-none py-4 max-h-40 min-h-[56px] text-lg font-medium"
+                        className="flex-1 bg-transparent border-none focus:ring-0 text-slate-100 placeholder:text-slate-500 resize-none py-4 max-h-40 min-h-[56px] text-base md:text-lg font-medium"
                         style={{ height: 'auto', overflow: 'hidden' }}
                         onInput={(e) => { e.currentTarget.style.height = 'auto'; e.currentTarget.style.height = e.currentTarget.scrollHeight + 'px'; }}
                     />
                     <Button 
-                        onClick={handleSendAction} 
+                        onClick={() => handleSendAction()} 
                         disabled={isLoading || !playerInput.trim()} 
                         variant="primary" 
                         fullWidth={false}
-                        className="!rounded-full !w-12 !h-12 !p-0 mb-1 mr-1 shadow-lg shadow-fuchsia-600/30 bg-fuchsia-600 hover:bg-fuchsia-500 border-none"
+                        className="!rounded-full !w-12 !h-12 !p-0 mb-1 mr-1 shadow-lg shadow-fuchsia-600/30 bg-fuchsia-600 hover:bg-fuchsia-500 border-none flex-shrink-0"
                     >
                         {isLoading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <Icon name="arrowUp" className="w-6 h-6 text-white"/>}
                     </Button>
@@ -513,17 +550,16 @@ const GameplayScreen: React.FC<GameplayScreenProps> = ({ initialGameState, onBac
                 {error && <p className="text-red-400 text-xs mt-3 text-center opacity-80">{error}</p>}
             </div>
             
+            {/* Notifications */}
             {lastStateUpdate && (
-                <div className="absolute bottom-28 right-6 z-50 animate-fade-in-up">
-                    <div className="glass-panel p-4 rounded-xl border border-emerald-500/30 bg-emerald-900/20 shadow-lg max-w-xs">
+                <div className="absolute bottom-32 right-4 md:right-8 z-50 animate-fade-in-up">
+                    <div className="glass-panel p-4 rounded-xl border border-emerald-500/30 bg-emerald-900/20 shadow-lg max-w-xs backdrop-blur-md">
                         <div className="text-xs font-bold text-emerald-400 uppercase mb-2">Cập nhật Trạng thái</div>
                         <ul className="text-xs text-emerald-100 space-y-1">
                             {lastStateUpdate.hp_change !== undefined && <li>❤️ HP: {lastStateUpdate.hp_change > 0 ? '+' : ''}{lastStateUpdate.hp_change}</li>}
                             {lastStateUpdate.gold_change !== undefined && <li>🪙 Gold: {lastStateUpdate.gold_change > 0 ? '+' : ''}{lastStateUpdate.gold_change}</li>}
-                            {lastStateUpdate.inventory_add && lastStateUpdate.inventory_add.map((i:any) => <li key={i}>🎒 + {i}</li>)}
-                            {lastStateUpdate.level_up && <li className="text-yellow-300 font-bold">✨ LÊN CẤP!</li>}
-                            {lastStateUpdate.time_passed && <li>⏳ +{lastStateUpdate.time_passed} phút</li>}
-                            {lastStateUpdate.codex_update && <li>📘 Codex: +{lastStateUpdate.codex_update.length} entry</li>}
+                            {lastStateUpdate.custom_stats_update && Array.isArray(lastStateUpdate.custom_stats_update) && lastStateUpdate.custom_stats_update.map((s: any) => <li key={s.id}>✨ {s.id}: {s.value > 0 ? '+' : ''}{s.value}</li>)}
+                            {lastStateUpdate.ui_mode && <li>🔄 Mode: {lastStateUpdate.ui_mode.toUpperCase()}</li>}
                         </ul>
                     </div>
                 </div>

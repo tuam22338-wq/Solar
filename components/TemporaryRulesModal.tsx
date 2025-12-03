@@ -1,4 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { TemporaryRule } from '../types';
 import Button from './common/Button';
 import Icon from './common/Icon';
@@ -19,7 +21,7 @@ const TemporaryRulesModal: React.FC<TemporaryRulesModalProps> = ({ isOpen, onClo
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center z-50 p-6" onClick={handleCloseAndSave}>
       <div className="glass-panel p-6 rounded-[2rem] w-full max-w-2xl max-h-[85vh] flex flex-col shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-6 pb-4 border-b border-white/5">
@@ -51,7 +53,8 @@ const TemporaryRulesModal: React.FC<TemporaryRulesModalProps> = ({ isOpen, onClo
              <Button onClick={handleCloseAndSave} variant="primary" fullWidth={false} className="!px-8 shadow-lg shadow-blue-500/20">Lưu Áp Dụng</Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

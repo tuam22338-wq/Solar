@@ -1,4 +1,6 @@
+
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import Button from './Button';
 import Icon from './Icon';
 import * as aiService from '../../services/aiService';
@@ -26,7 +28,7 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onSave, onCancel }) =
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[150] p-6">
       <div className="glass-panel p-8 rounded-3xl w-full max-w-lg relative animate-fade-in-up border border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
         <div className="w-16 h-16 bg-gradient-to-br from-fuchsia-500 to-purple-600 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-fuchsia-500/30">
@@ -54,7 +56,8 @@ const ApiKeyModal: React.FC<ApiKeyModalProps> = ({ isOpen, onSave, onCancel }) =
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

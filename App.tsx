@@ -1,83 +1,40 @@
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import HomeScreen from './components/HomeScreen';
 import WorldCreationScreen from './components/WorldCreationScreen';
 import SettingsScreen from './components/SettingsScreen';
 import GameplayScreen from './components/GameplayScreen';
 import TrainRagScreen from './components/TrainRagScreen';
-import { WorldConfig, GameState, AppSettings } from './types';
-import { DEFAULT_WORLD_TIME, DEFAULT_PLAYER_ANALYSIS, DEFAULT_SETTINGS } from './constants';
-import { getSettings, saveSettings } from './services/settingsService';
-
-type Screen = 'home' | 'create' | 'settings' | 'gameplay' | 'train';
+import { useStore } from '../store/useStore';
 
 const App: React.FC = () => {
-  const [currentScreen, setCurrentScreen] = useState<Screen>('home');
-  const [gameState, setGameState] = useState<GameState | null>(null);
-  const [editingConfig, setEditingConfig] = useState<WorldConfig | null>(null);
-  const [zoomLevel, setZoomLevel] = useState<number>(1.0);
-  const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
-
-  // --- SETTINGS & ZOOM INITIALIZATION ---
-  useEffect(() => {
-    const loaded = getSettings();
-    setAppSettings(loaded);
-    
-    let initialZoom = 1.0;
-    if (loaded.uiSettings.zoomLevel && loaded.uiSettings.zoomLevel !== 1.0) {
-        initialZoom = loaded.uiSettings.zoomLevel;
-    } else {
-        // Default to 1.0 (Mobile Native) if not set. 
-        // Previously defaulted to 0.5, but user feedback suggests inversion confusion.
-        // Let's rely on explicit user choice.
-        initialZoom = 1.0;
-    }
-    setZoomLevel(initialZoom);
-  }, []);
-
-  const updateSettings = useCallback((newSettings: AppSettings) => {
-      setAppSettings(newSettings);
-      saveSettings(newSettings);
-      // Apply Zoom immediately if changed
-      if (newSettings.uiSettings.zoomLevel) {
-          setZoomLevel(newSettings.uiSettings.zoomLevel);
-      }
-  }, []);
+  const { currentScreen, zoomLevel, setZoomLevel, setScreen } = useStore();
 
   // --- HARDWARE ZOOM EVENTS (Ctrl+Wheel / Ctrl+Keys) ---
   useEffect(() => {
       const handleWheel = (e: WheelEvent) => {
           if (e.ctrlKey) {
-              e.preventDefault(); // STOP BROWSER NATIVE ZOOM
+              e.preventDefault(); 
               const delta = e.deltaY * -0.001;
-              const newZoom = Math.min(Math.max(zoomLevel + delta, 0.4), 1.5);
-              setZoomLevel(newZoom);
-              // Update settings to match
-              updateSettings({
-                  ...appSettings,
-                  uiSettings: { ...appSettings.uiSettings, zoomLevel: newZoom }
-              });
+              const current = useStore.getState().zoomLevel; // Access direct state to avoid stale closure
+              setZoomLevel(Math.min(Math.max(current + delta, 0.5), 1.5));
           }
       };
 
       const handleKeyDown = (e: KeyboardEvent) => {
           if (e.ctrlKey) {
+              const current = useStore.getState().zoomLevel;
               if (e.key === '=' || e.key === '+') {
                   e.preventDefault();
-                  const newZoom = Math.min(zoomLevel + 0.1, 1.5);
-                  setZoomLevel(newZoom);
-                  updateSettings({ ...appSettings, uiSettings: { ...appSettings.uiSettings, zoomLevel: newZoom } });
+                  setZoomLevel(Math.min(current + 0.1, 1.5));
               }
               if (e.key === '-') {
                   e.preventDefault();
-                  const newZoom = Math.max(zoomLevel - 0.1, 0.4);
-                  setZoomLevel(newZoom);
-                  updateSettings({ ...appSettings, uiSettings: { ...appSettings.uiSettings, zoomLevel: newZoom } });
+                  setZoomLevel(Math.max(current - 0.1, 0.5));
               }
               if (e.key === '0') {
                   e.preventDefault();
                   setZoomLevel(1.0);
-                  updateSettings({ ...appSettings, uiSettings: { ...appSettings.uiSettings, zoomLevel: 1.0 } });
               }
           }
       };
@@ -89,7 +46,7 @@ const App: React.FC = () => {
           window.removeEventListener('wheel', handleWheel);
           window.removeEventListener('keydown', handleKeyDown);
       };
-  }, [zoomLevel, appSettings, updateSettings]);
+  }, [setZoomLevel]);
 
   // --- CLEAN UP BODY STYLES ---
   useEffect(() => {
@@ -100,94 +57,19 @@ const App: React.FC = () => {
       document.body.style.overflow = 'hidden'; 
   }, []);
 
-  const handleStartNew = useCallback(() => {
-    setEditingConfig(null);
-    setCurrentScreen('create');
-  }, []);
-
-  const handleLoadGame = useCallback((config: WorldConfig) => {
-    setEditingConfig(config);
-    setCurrentScreen('create');
-  }, []);
-  
-  const handleStartGame = useCallback((config: WorldConfig) => {
-    setGameState({ 
-        worldConfig: config, 
-        history: [],
-        worldTime: DEFAULT_WORLD_TIME,
-        weather: 'Sunny',
-        questLog: [],
-        playerAnalysis: DEFAULT_PLAYER_ANALYSIS,
-        codex: [] 
-    });
-    setCurrentScreen('gameplay');
-  }, []);
-
-  const handleLoadSavedGame = useCallback((state: GameState) => {
-    const upgradedState = {
-        ...state,
-        worldTime: state.worldTime && state.worldTime.year ? state.worldTime : DEFAULT_WORLD_TIME,
-        weather: state.weather || 'Sunny',
-        questLog: state.questLog || [],
-        playerAnalysis: state.playerAnalysis || DEFAULT_PLAYER_ANALYSIS,
-        codex: state.codex || []
-    };
-    setGameState(upgradedState);
-    setCurrentScreen('gameplay');
-  }, []);
-
-  const handleNavigateToSettings = useCallback(() => {
-    setCurrentScreen('settings');
-  }, []);
-  
-  const handleNavigateToTrain = useCallback(() => {
-      setCurrentScreen('train');
-  }, []);
-
-  const handleBackToHome = useCallback(() => {
-    setGameState(null);
-    setEditingConfig(null);
-    setCurrentScreen('home');
-  }, []);
-
   const renderScreen = () => {
     switch (currentScreen) {
-      case 'create':
-        return <WorldCreationScreen onBack={handleBackToHome} initialConfig={editingConfig} onStartGame={handleStartGame} />;
-      case 'settings':
-        return <SettingsScreen onBack={handleBackToHome} settings={appSettings} onUpdateSettings={updateSettings} />;
-      case 'train':
-        return <TrainRagScreen onBack={handleBackToHome} />;
-      case 'gameplay':
-        if (gameState) {
-          // If zoom is less than 0.9, we assume desktop scaling mode.
-          const isDesktopMode = zoomLevel < 0.9;
-          return <GameplayScreen 
-             initialGameState={gameState} 
-             onBack={handleBackToHome} 
-             textSize={appSettings.uiSettings.textSize} 
-             isDesktopMode={isDesktopMode}
-          />;
-        }
-        setCurrentScreen('home');
-        return null;
+      case 'create': return <WorldCreationScreen onBack={() => setScreen('home')} />;
+      case 'settings': return <SettingsScreen onBack={() => setScreen('home')} />;
+      case 'train': return <TrainRagScreen onBack={() => setScreen('home')} />;
+      case 'gameplay': return <GameplayScreen onBack={() => setScreen('home')} />;
       case 'home':
-      default:
-        return (
-          <HomeScreen
-            onStartNew={handleStartNew}
-            onLoadGame={handleLoadGame}
-            onLoadSavedGame={handleLoadSavedGame}
-            onNavigateToSettings={handleNavigateToSettings}
-            onNavigateToTrain={handleNavigateToTrain}
-          />
-        );
+      default: return <HomeScreen />;
     }
   };
 
   return (
-    <main className="relative w-full h-screen overflow-hidden bg-slate-950">
-      
+    <main className="relative w-full h-[100dvh] overflow-hidden bg-slate-950">
       {/* 1. FIXED BACKGROUND LAYER */}
       <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none w-screen h-screen">
          <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-purple-900/40 rounded-full mix-blend-screen filter blur-[100px] animate-pulse"></div>
@@ -199,10 +81,8 @@ const App: React.FC = () => {
       {/* 2. SCALABLE CONTENT LAYER */}
       <div 
         className="relative z-10 overflow-auto"
-        style={{
-            // Scale the content to fit the viewport based on zoom level
+        style={zoomLevel === 1.0 ? { width: '100%', height: '100%' } : {
             transform: `scale(${zoomLevel})`,
-            // Inverse width to ensure it fills the visual screen
             width: `${100 / zoomLevel}%`,
             height: `${100 / zoomLevel}%`,
             transformOrigin: 'top left'
@@ -215,4 +95,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-    

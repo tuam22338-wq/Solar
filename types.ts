@@ -6,6 +6,44 @@ export interface InitialEntity {
   description: string;
 }
 
+// --- NEW RPG TYPES ---
+export interface CustomStat {
+  id: string; // e.g. "sanity", "mana"
+  name: string; // Display name e.g. "Lý Trí", "Linh Lực"
+  value: number;
+  max: number;
+  color: string; // hex or tailwind class suffix e.g. "blue", "purple"
+  icon: string; // icon name
+  description?: string; // Describe what consumes this stat
+}
+
+// --- PROGRESSION SYSTEM TYPES ---
+export interface RankRequirement {
+    statId: string; // Must match a CustomStat.id
+    value: number;  // Threshold required
+}
+
+export interface Rank {
+    id: string;
+    name: string; // e.g. "Luyện Khí Kỳ", "Hạng F"
+    description: string;
+    requirements: RankRequirement[]; // Conditions to reach this rank (from previous) or conditions to maintain? Usually to REACH.
+}
+
+export interface ProgressionSystem {
+    enabled: boolean;
+    name: string; // e.g. "Hệ Thống Tu Tiên", "Class Advancement"
+    ranks: Rank[];
+}
+
+export interface AdvancedRules {
+    enableTimeSystem: boolean;      // Hệ thống ngày đêm
+    enableCurrencySystem: boolean;  // Hệ thống tiền tệ
+    enableInventorySystem: boolean; // Hệ thống trang bị/túi đồ
+    enableCraftingSystem: boolean;  // Hệ thống chế tạo
+    enableReputationSystem: boolean;// Hệ thống danh tiếng
+}
+
 export interface CharacterConfig {
   name: string;
   personality: string;
@@ -17,7 +55,6 @@ export interface CharacterConfig {
     description: string;
   };
   motivation: string;
-  // New Fields
   inventory: string[];
   relationships: {
     name: string;
@@ -28,8 +65,11 @@ export interface CharacterConfig {
   hp: number;
   maxHp: number;
   gold: number;
-  level: number;
   statusEffects: string[]; // Poisoned, Blessed, etc.
+  customStats: CustomStat[];
+  
+  // Progression
+  currentRankIndex: number; // 0-based index pointing to ProgressionSystem.ranks
 }
 
 export interface WorldLore {
@@ -43,17 +83,16 @@ export interface WorldLore {
 }
 
 export interface WritingConfig {
-  perspective: 'second' | 'first' | 'third'; // "Bạn...", "Tôi...", "Hắn/Cô ấy..."
-  narrativeStyle: string; // Descriptive, Direct, Novel-like...
+  perspective: 'second' | 'first' | 'third'; 
+  narrativeStyle: string; 
   responseLength: 'short' | 'medium' | 'long';
+  minResponseLength: number; // New field for precise word count control
 }
 
 export interface TemporaryRule {
   text: string;
   enabled: boolean;
 }
-
-// --- TIER 3 NEW TYPES ---
 
 export type WeatherType = 'Sunny' | 'Cloudy' | 'Rainy' | 'Stormy' | 'Snowy' | 'Foggy' | 'Mystical';
 
@@ -74,9 +113,9 @@ export interface Quest {
 }
 
 export interface PlayerAnalysis {
-  archetype: string; // e.g., "The Warrior", "The Diplomat"
-  behaviorTags: string[]; // e.g., ["Aggressive", "Calculated"]
-  reputation: number; // -100 to 100
+  archetype: string; 
+  behaviorTags: string[]; 
+  reputation: number; 
 }
 
 export interface KnowledgeBase {
@@ -86,42 +125,71 @@ export interface KnowledgeBase {
 }
 
 export interface CodexRelation {
-    targetId: string; // The ID of the other entity
+    targetId: string; 
     targetName: string;
-    type: string; // e.g., "Father", "Enemy", "Ally"
+    type: string; 
     description?: string;
 }
 
 export interface CodexEntry {
     id: string;
     name: string;
-    type: 'Character' | 'Location' | 'Item' | 'Faction' | 'Concept' | 'Creature';
-    tags: string[]; // Auto-generated tags e.g. ["Merchant", "Hostile", "Magic"]
+    type: 'Character' | 'Location' | 'Item' | 'Faction' | 'Concept' | 'Creature' | 'Lore';
+    tags: string[]; 
     description: string;
-    relations?: CodexRelation[]; // Knowledge Graph Edges
-    lastUpdated: string; // ISO date string
-    isNew?: boolean; // UI flag for notification
+    relations?: CodexRelation[]; 
+    lastUpdated: string; 
+    isNew?: boolean; 
+    embedding?: number[]; // Vector embedding for RAG
 }
 
-// ------------------------
+// --- STATE MACHINE TYPES ---
+export type InterfaceMode = 'adventure' | 'combat' | 'exchange';
+
+export interface CombatEntity {
+    id: string;
+    name: string;
+    hp: number;
+    maxHp: number;
+    description?: string;
+    statusEffects?: string[];
+    isDead?: boolean;
+}
+
+export interface TradeItem {
+    id: string;
+    name: string;
+    cost: number;
+    description?: string;
+}
+
+export interface MerchantData {
+    name: string;
+    inventory: TradeItem[];
+}
 
 export interface WorldConfig {
   storyContext: {
     genre: string;
-    setting: string; // General summary
+    setting: string; 
   };
-  worldLore: WorldLore; // Detailed lore
+  worldLore: WorldLore; 
   character: CharacterConfig;
   difficulty: string;
   allowAdultContent: boolean;
   sexualContentStyle?: string;
   violenceLevel?: string;
   storyTone?: string;
-  startingScenario: string; // The exact situation the game starts in
+  startingScenario: string; 
   writingConfig: WritingConfig;
   coreRules: string[];
   initialEntities: InitialEntity[];
   temporaryRules: TemporaryRule[];
+  
+  // New System
+  progressionSystem: ProgressionSystem;
+  advancedRules: AdvancedRules; // NEW FIELD
+  initialCodex?: CodexEntry[]; // RAG Data loaded at start
 }
 
 export enum HarmCategory {
@@ -149,31 +217,27 @@ export interface SafetySettingsConfig {
 }
 
 export interface AiGenerationSettings {
-    // Modules
-    enableStoryGraph: boolean; // StoryGraph + GraphRAG
-    enableMemoryBank: boolean; // MemoryBank + Recursive Outlining
-    enableChainOfThought: boolean; // Tree of Thoughts (ToT) + Backtracking
-    enableSelfReflection: boolean; // Self-RAG + Chain-of-Note
-    enableEnsembleModeling: boolean; // Multi-Agent Debate
-    enableEmotionalIntelligence: boolean; // EQ Engine
-    enableMultimodalRag: boolean; // Visual Context Processing
-    enableVertexRag: boolean; // High Precision Retrieval
-    enableCodexProfiling: boolean; // Auto-generated Codex/Wiki
-    
-    // New Techniques
-    enableDynamicReference: boolean; // Dynamic Reference Tracking
-    enableAiTemplates: boolean; // AI-Generated Templates
-    enableRelationGraphs: boolean; // Knowledge Relation Graphs
-    enableDynamicExtraction: boolean; // Real-time Profiling
+    enableStoryGraph: boolean; 
+    enableMemoryBank: boolean; 
+    enableChainOfThought: boolean; 
+    enableSelfReflection: boolean; 
+    enableEnsembleModeling: boolean; 
+    enableEmotionalIntelligence: boolean; 
+    enableMultimodalRag: boolean; 
+    enableVertexRag: boolean; 
+    enableCodexProfiling: boolean; 
+    enableDynamicReference: boolean; 
+    enableAiTemplates: boolean; 
+    enableRelationGraphs: boolean; 
+    enableDynamicExtraction: boolean; 
 
-    // Advanced Config
     modelName: string;
     embeddingModelName: string;
     temperature: number;
     topP: number;
     topK: number;
     maxOutputTokens: number;
-    thinkingBudget: number; // 0 to disable
+    thinkingBudget: number; 
 }
 
 export interface UiSettings {
@@ -204,24 +268,28 @@ export interface AppSettings {
 export interface GameTurn {
   type: 'narration' | 'action';
   content: string;
-  stateSnapshot?: Partial<CharacterConfig>; // Stores state at this turn
+  stateSnapshot?: Partial<CharacterConfig>; 
 }
 
 export interface GameState {
   worldConfig: WorldConfig;
   history: GameTurn[];
-  summary?: string; // Long-term memory storage
+  summary?: string; 
   
-  // Tier 3 Fields
   worldTime: WorldTime;
   weather: WeatherType;
   questLog: Quest[];
   playerAnalysis: PlayerAnalysis;
-  codex: CodexEntry[]; // Dynamic Knowledge Base
+  codex: CodexEntry[]; 
+  
+  // --- STATE MACHINE ---
+  interfaceMode: InterfaceMode; // 'adventure', 'combat', 'exchange'
+  activeEnemies: CombatEntity[]; // For combat mode
+  activeMerchant: MerchantData | null; // For exchange mode
 }
 
 export interface SaveSlot extends GameState {
-  saveId: number; // Using Date.now()
-  saveDate: string; // ISO String for display
+  saveId: number; 
+  saveDate: string; 
   previewText: string;
 }

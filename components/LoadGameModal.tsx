@@ -1,4 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { SaveSlot, GameState } from '../types';
 import * as gameService from '../services/gameService';
 import Button from './common/Button';
@@ -24,7 +26,7 @@ const LoadGameModal: React.FC<LoadGameModalProps> = ({ isOpen, onClose, onLoad }
 
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-50 p-6" onClick={onClose}>
       <div className="glass-panel p-6 md:p-8 rounded-[2rem] w-full max-w-2xl max-h-[80vh] flex flex-col relative animate-fade-in-up shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-8">
@@ -54,7 +56,8 @@ const LoadGameModal: React.FC<LoadGameModalProps> = ({ isOpen, onClose, onLoad }
           )) : <div className="text-center py-20 text-slate-600 italic">Không tìm thấy dữ liệu nào.</div>}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

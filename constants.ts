@@ -1,5 +1,6 @@
 
-import { WorldConfig, HarmCategory, HarmBlockThreshold, SafetySettingsConfig, WeatherType, WorldTime, PlayerAnalysis, AiGenerationSettings, AppSettings } from './types';
+
+import { WorldConfig, HarmCategory, HarmBlockThreshold, SafetySettingsConfig, WeatherType, WorldTime, PlayerAnalysis, AiGenerationSettings, AppSettings, ProgressionSystem } from './types';
 
 export const GENDER_OPTIONS = ['Không xác định (Để AI quyết định)', 'Nam', 'Nữ', 'Khác'];
 export const PERSONALITY_OPTIONS = [
@@ -53,6 +54,14 @@ export const STARTING_SCENARIO_OPTIONS = [
     'Lạc vào một vùng đất cấm'
 ];
 
+export const DEFAULT_PROGRESSION_SYSTEM: ProgressionSystem = {
+    enabled: true,
+    name: 'Hệ Thống Cấp Bậc',
+    ranks: [
+        { id: 'rank_1', name: 'Tân Thủ', description: 'Người mới bắt đầu bước chân vào thế giới này.', requirements: [] }
+    ]
+};
+
 export const DEFAULT_WORLD_CONFIG: WorldConfig = {
   storyContext: {
     genre: '',
@@ -77,8 +86,9 @@ export const DEFAULT_WORLD_CONFIG: WorldConfig = {
     hp: 100,
     maxHp: 100,
     gold: 50,
-    level: 1,
-    statusEffects: []
+    statusEffects: [],
+    customStats: [],
+    currentRankIndex: 0
   },
   difficulty: DIFFICULTY_OPTIONS[1],
   allowAdultContent: false,
@@ -89,14 +99,56 @@ export const DEFAULT_WORLD_CONFIG: WorldConfig = {
   writingConfig: {
       perspective: 'second',
       narrativeStyle: 'Tiểu thuyết nhập vai, chi tiết và gợi hình',
-      responseLength: 'medium'
+      responseLength: 'medium',
+      minResponseLength: 1500
   },
   coreRules: [],
   initialEntities: [],
   temporaryRules: [],
+  progressionSystem: DEFAULT_PROGRESSION_SYSTEM,
+  advancedRules: {
+      enableTimeSystem: true,
+      enableCurrencySystem: true,
+      enableInventorySystem: true,
+      enableCraftingSystem: false,
+      enableReputationSystem: false
+  },
+  initialCodex: []
 };
 
-// --- TIER 3 DEFAULTS ---
+// --- PROGRESSION TEMPLATES ---
+export const PROGRESSION_TEMPLATES = {
+    CULTIVATION: {
+        name: 'Tu Tiên Giới',
+        ranks: [
+            { id: 'r1', name: 'Luyện Khí Kỳ', description: 'Hấp thu linh khí thiên địa, tẩy rửa phàm thai.', requirements: [] },
+            { id: 'r2', name: 'Trúc Cơ Kỳ', description: 'Xây dựng đạo cơ, thọ nguyên tăng lên 200 năm.', requirements: [] }, // User needs to map stats
+            { id: 'r3', name: 'Kim Đan Kỳ', description: 'Ngưng tụ kim đan, pháp lực vô biên.', requirements: [] },
+            { id: 'r4', name: 'Nguyên Anh Kỳ', description: 'Đập tan kim đan, nguyên anh xuất thế.', requirements: [] },
+            { id: 'r5', name: 'Hóa Thần Kỳ', description: 'Thần thức dung hợp thiên địa, chưởng khống quy tắc.', requirements: [] }
+        ]
+    },
+    HUNTER: {
+        name: 'Hiệp Hội Thợ Săn',
+        ranks: [
+            { id: 'r1', name: 'Hạng E', description: 'Thợ săn yếu nhất, chỉ làm việc vặt.', requirements: [] },
+            { id: 'r2', name: 'Hạng D', description: 'Có khả năng chiến đấu cơ bản.', requirements: [] },
+            { id: 'r3', name: 'Hạng C', description: 'Thợ săn trung bình, là lực lượng nòng cốt.', requirements: [] },
+            { id: 'r4', name: 'Hạng B', description: 'Thợ săn ưu tú, được các bang hội săn đón.', requirements: [] },
+            { id: 'r5', name: 'Hạng A', description: 'Cao thủ hàng đầu, sức mạnh phá hủy xe bọc thép.', requirements: [] },
+            { id: 'r6', name: 'Hạng S', description: 'Thảm họa cấp quốc gia, sức mạnh hủy diệt thành phố.', requirements: [] }
+        ]
+    },
+    CYBERPUNK: {
+        name: 'Cyberpunk Edgerunners',
+        ranks: [
+            { id: 'r1', name: 'Street Rat', description: 'Sống chui nhủi dưới đáy xã hội.', requirements: [] },
+            { id: 'r2', name: 'Edgerunner', description: 'Lính đánh thuê tự do, nhận hợp đồng rủi ro.', requirements: [] },
+            { id: 'r3', name: 'Mercenary Legend', description: 'Huyền thoại sống của Afterlife.', requirements: [] }
+        ]
+    }
+};
+
 
 export const WEATHER_OPTIONS: WeatherType[] = ['Sunny', 'Cloudy', 'Rainy', 'Stormy', 'Snowy', 'Foggy', 'Mystical'];
 

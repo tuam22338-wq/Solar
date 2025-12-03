@@ -1,6 +1,6 @@
 
-
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { CodexEntry, WorldConfig } from '../types';
 import Icon from './common/Icon';
 import Button from './common/Button';
@@ -43,7 +43,7 @@ const CodexModal: React.FC<CodexModalProps> = ({ isOpen, onClose, entries, onExp
       }
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-xl flex items-center justify-center z-[100] p-4 md:p-8" onClick={onClose}>
       <div className="glass-panel w-full max-w-5xl h-[90vh] flex rounded-[2rem] overflow-hidden shadow-2xl border-indigo-500/20 relative" onClick={e => e.stopPropagation()}>
          
@@ -189,7 +189,8 @@ const CodexModal: React.FC<CodexModalProps> = ({ isOpen, onClose, entries, onExp
          </div>
 
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
